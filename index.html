@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>xdg-ai-tools · AI 工具集</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #f5f7fa 0%, #e8edf5 100%);
+    min-height: 100vh;
+    color: #1f2937;
+  }
+  .container { max-width: 720px; margin: 0 auto; padding: 48px 20px 60px; }
+  header { text-align: center; margin-bottom: 40px; }
+  header .logo {
+    width: 64px; height: 64px; margin: 0 auto 16px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    border-radius: 18px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
+  }
+  header h1 { font-size: 28px; font-weight: 700; letter-spacing: 0.5px; }
+  header p { margin-top: 8px; color: #6b7280; font-size: 15px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  .card {
+    background: #fff; border-radius: 16px; padding: 24px;
+    text-decoration: none; color: inherit;
+    display: flex; align-items: center; gap: 20px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .card:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12); }
+  .card .icon {
+    width: 56px; height: 56px; flex-shrink: 0;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .icon.cache { background: #eef2ff; color: #4f46e5; }
+  .icon.eye { background: #ecfdf5; color: #059669; }
+  .card .info h2 { font-size: 18px; font-weight: 600; }
+  .card .info p { margin-top: 6px; color: #6b7280; font-size: 14px; line-height: 1.6; }
+  .card .arrow { margin-left: auto; color: #9ca3af; flex-shrink: 0; }
+  .card:hover .arrow { color: #4f46e5; }
+  footer { text-align: center; margin-top: 40px; color: #9ca3af; font-size: 13px; }
+  footer a { color: #6b7280; text-decoration: none; }
+  footer a:hover { color: #4f46e5; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="18" height="18" rx="5"/>
+        <circle cx="8.5" cy="8.5" r="1.6" fill="#fff" stroke="none"/>
+        <circle cx="15.5" cy="15.5" r="1.6" fill="#fff" stroke="none"/>
+        <path d="M10 8.5h3.5a3 3 0 0 1 3 3V15"/>
+        <path d="M9 15.5H6.5a2.5 2.5 0 0 1-2.5-2.5V9.5"/>
+      </svg>
+    </div>
+    <h1>xdg-ai-tools</h1>
+    <p>两个实用的轻量 AI 工具，纯前端 · 零依赖 · 打开即用</p>
+  </header>
+
+  <div class="grid">
+    <a class="card" href="./AI缓存命中计算器.html">
+      <div class="icon cache">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <circle cx="12" cy="12" r="4.5"/>
+          <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>
+        </svg>
+      </div>
+      <div class="info">
+        <h2>AI 缓存命中计算器</h2>
+        <p>计算缓存命中率、分析缓存收益，快速评估推理服务的缓存效果。</p>
+      </div>
+      <svg class="arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14M13 6l6 6-6 6"/>
+      </svg>
+    </a>
+
+    <a class="card" href="./用眼时长提示器.html">
+      <div class="icon eye">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
+          <circle cx="12" cy="12" r="3"/>
+        </svg>
+      </div>
+      <div class="info">
+        <h2>用眼时长提示器</h2>
+        <p>记录用眼时长，定时提醒休息，守护视力健康。</p>
+      </div>
+      <svg class="arrow" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 12h14M13 6l6 6-6 6"/>
+      </svg>
+    </a>
+  </div>
+
+  <footer>
+    由 <a href="https://github.com/Xuduodoggg" target="_blank" rel="noopener">Xuduodoggg</a> 制作 · 托管于 GitHub Pages
+  </footer>
+</div>
+</body>
+</html>
