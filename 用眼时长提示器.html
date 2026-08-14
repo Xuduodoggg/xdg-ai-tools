@@ -1,0 +1,1910 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#f7faf8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>用眼时长提示器</title>
+<style>
+  /* ============ 基础与配色（浅色护眼风 / 深色模式） ============ */
+  :root{
+    --bg:#f7faf8;            /* 米白背景 */
+    --card:#ffffff;          /* 卡片白 */
+    --input-bg:#fbfdfc;      /* 输入框背景 */
+    --chip-bg:#e6f7f0;       /* 浅绿底（标签/悬停） */
+    --chip-bg-strong:#f0fdf8;
+    --primary:#34d399;       /* 青绿主色 */
+    --primary-deep:#0ea371;  /* 深青绿（按钮） */
+    --ring-track:#d1fae5;    /* 进度环底色 */
+    --text:#1f2937;          /* 深灰文字 */
+    --text-soft:#6b7280;     /* 次级文字 */
+    --line:#e5e7eb;          /* 边框 */
+    --danger:#dc2626;        /* 错误红 */
+    --warn:#d97706;          /* 警告黄 */
+    --rest-bg:#14532d;       /* 休息背景：深绿 */
+    --rest-text:#ecfdf5;     /* 休息文字 */
+    --rest-sub:#a7f3d0;      /* 休息次级文字 */
+    --notice-bg:#fef3c7;     /* 提醒横幅底色 */
+    --notice-text:#92400e;   /* 提醒横幅文字 */
+    --notice-line:#f59e0b;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f172a;            /* 深色背景 */
+    --card:#1e293b;          /* 深色卡片 */
+    --input-bg:#0b1526;      /* 深色输入框 */
+    --chip-bg:rgba(52,211,153,.14);
+    --chip-bg-strong:rgba(52,211,153,.22);
+    --ring-track:#14532d;
+    --text:#e2e8f0;
+    --text-soft:#94a3b8;
+    --line:rgba(148,163,184,.22);
+    --danger:#f87171;
+    --warn:#fbbf24;
+    --notice-bg:#3a2a0d;
+    --notice-text:#fcd34d;
+    --notice-line:#f59e0b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  html{height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);color:var(--text);line-height:1.5;
+    padding-bottom:env(safe-area-inset-bottom);
+    -webkit-text-size-adjust:100%;
+  }
+  /* 主要使用场景为电脑端：布局略宽，鼠标键盘操作优先 */
+  .wrap{max-width:720px;margin:0 auto;padding:24px 20px 48px;}
+
+  /* ============ 品牌水印（右下角固定，半透明） ============ */
+  .brand-watermark{
+    position:fixed;right:14px;bottom:10px;z-index:5;
+    font-size:11px;font-weight:600;letter-spacing:3px;text-transform:lowercase;
+    color:var(--primary-deep);opacity:.38;
+    user-select:none;pointer-events:none;
+  }
+
+  /* ============ 头部：标题 + 今日统计 + 备份入口 ============ */
+  header{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+  header .logo{width:30px;height:30px;color:var(--primary-deep);flex:none;}
+  h1{font-size:22px;font-weight:800;letter-spacing:.5px;}
+  .stats{font-size:13px;color:var(--text-soft);display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;}
+  .stats .btns{margin-left:auto;display:flex;gap:2px;}
+  .link-btn{
+    background:none;border:none;color:var(--primary-deep);font-size:13px;cursor:pointer;
+    padding:8px 10px;border-radius:8px;min-height:36px;font-family:inherit;
+  }
+  .link-btn:hover{background:var(--chip-bg);}
+  .link-btn:active{background:var(--chip-bg-strong);}
+  .link-btn .mini{font-size:11px;opacity:.7;margin-left:2px;}
+
+  /* ============ 顶部提示横幅（距离/眨眼/接管提醒） ============ */
+  .notice-bar{
+    display:none;align-items:center;gap:8px;
+    background:var(--notice-bg);color:var(--notice-text);
+    border:1px solid var(--notice-line);border-radius:12px;
+    padding:10px 14px;margin-top:12px;font-size:13px;font-weight:600;
+  }
+  .notice-bar.show{display:flex;animation:popIn .25s ease;}
+  .notice-bar svg{width:17px;height:17px;flex:none;color:var(--notice-line);}
+  .notice-bar.danger{border-color:var(--danger);color:var(--danger);}
+  .notice-bar.danger svg{color:var(--danger);}
+
+  /* ============ 多标签页接管提示条 ============ */
+  .slave-bar{
+    display:none;align-items:center;gap:8px;
+    background:var(--chip-bg);color:var(--primary-deep);
+    border:1px solid var(--primary);border-radius:12px;
+    padding:10px 14px;margin-top:12px;font-size:13px;font-weight:600;
+  }
+  .slave-bar.show{display:flex;}
+  .slave-bar svg{width:17px;height:17px;flex:none;}
+
+  /* ============ 高级设置行（语言/主题/开关） ============ */
+  .adv-row{
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+    margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);
+  }
+  .adv-chip{
+    display:inline-flex;align-items:center;gap:7px;
+    background:var(--chip-bg);color:var(--primary-deep);
+    border:1.5px solid var(--line);border-radius:999px;
+    padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;
+    min-height:44px;font-family:inherit;transition:all .15s;
+  }
+  .adv-chip svg{width:16px;height:16px;}
+  .adv-chip:hover{border-color:var(--primary);}
+  .adv-chip.on{border-color:var(--primary);background:var(--chip-bg-strong);}
+  .adv-chip .state{font-weight:500;opacity:.75;font-size:12px;}
+
+  /* 触发距离：设备切换 + 滑块 */
+  .adv-dist{
+    flex:1 1 100%;display:flex;flex-direction:column;gap:8px;
+    padding:10px 4px;min-height:44px;
+  }
+  .device-switch{display:flex;gap:8px;}
+  .dev-chip{
+    display:inline-flex;align-items:center;gap:6px;
+    background:var(--input-bg);color:var(--text-soft);
+    border:1.5px solid var(--line);border-radius:999px;
+    padding:7px 14px;font-size:13px;font-weight:700;cursor:pointer;
+    min-height:40px;font-family:inherit;transition:all .15s;
+  }
+  .dev-chip svg{width:15px;height:15px;}
+  .dev-chip:hover{border-color:var(--primary);color:var(--primary-deep);}
+  .dev-chip.on{border-color:var(--primary);background:var(--chip-bg-strong);color:var(--primary-deep);}
+  .dev-chip:disabled{opacity:.45;cursor:not-allowed;}
+  .dist-slider-row{display:flex;align-items:center;gap:12px;}
+  .adv-dist label{font-size:13px;color:var(--text-soft);font-weight:600;white-space:nowrap;}
+  .adv-dist input[type="range"]{
+    flex:1;min-width:120px;height:24px;accent-color:var(--primary-deep);cursor:pointer;
+  }
+  .adv-dist .dist-val{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:13px;font-weight:700;color:var(--primary-deep);min-width:52px;text-align:right;
+  }
+  .adv-dist input[type="range"]:disabled{opacity:.45;cursor:not-allowed;}
+  .dist-hint{flex:1 1 100%;font-size:12px;color:var(--text-soft);padding:0 4px 2px;min-height:16px;}
+  .dist-dbg{
+    flex:1 1 100%;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:12px;color:var(--text-soft);background:var(--input-bg);
+    border:1px dashed var(--line);border-radius:8px;padding:7px 10px;min-height:32px;
+  }
+
+  /* ============ 护眼助手独立窗口（helper=1 整窗模式） ============ */
+  #helperWinUi{
+    position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:var(--rest-bg);color:var(--rest-text);text-align:center;padding:28px;
+    user-select:none;-webkit-user-select:none;
+  }
+  body.helper-win .wrap{display:none;}
+  body.helper-win #helperWinUi{display:flex;}
+  .helper-title{font-size:24px;font-weight:800;margin-bottom:6px;}
+  .helper-sub{font-size:13px;color:var(--rest-sub);margin-bottom:30px;}
+  .helper-dist{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
+  .helper-dot{width:16px;height:16px;border-radius:50%;background:var(--primary);box-shadow:0 0 0 4px rgba(52,211,153,.2);}
+  .helper-dot.warn{background:#fbbf24;box-shadow:0 0 0 4px rgba(251,191,36,.2);}
+  .helper-dot.danger{background:#f87171;box-shadow:0 0 0 4px rgba(248,113,113,.2);}
+  .helper-text{font-size:18px;font-weight:700;}
+  .helper-meter{width:min(70vw,300px);height:10px;background:rgba(255,255,255,.15);border-radius:999px;overflow:hidden;margin-bottom:26px;}
+  .helper-meter i{display:block;height:100%;width:0%;background:var(--primary);border-radius:999px;transition:width .3s linear;}
+  .helper-meter i.warn{background:#fbbf24;}
+  .helper-meter i.danger{background:#f87171;}
+  .helper-hint{
+    min-height:64px;display:flex;align-items:center;justify-content:center;
+    font-size:20px;font-weight:800;color:#fef3c7;padding:14px 20px;border-radius:12px;
+    background:rgba(254,243,199,.08);
+  }
+  .helper-note{margin-top:24px;font-size:12px;color:rgba(236,253,245,.5);}
+
+  /* ============ 卡片 ============ */
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:18px;margin-top:16px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+  }
+  .card h2{font-size:15px;font-weight:700;margin-bottom:14px;color:var(--text);display:flex;align-items:center;gap:8px;}
+  .card h2 svg{width:17px;height:17px;color:var(--primary-deep);}
+
+  /* ============ 时长设置区 ============ */
+  .row{display:flex;gap:12px;flex-wrap:wrap;}
+  .field{flex:1;min-width:130px;}
+  .field label{display:block;font-size:13px;color:var(--text-soft);margin-bottom:6px;font-weight:500;}
+  .field input{
+    width:100%;font-size:16px;padding:12px;border:1.5px solid var(--line);border-radius:10px;
+    background:var(--input-bg);color:var(--text);outline:none;min-height:48px;font-family:inherit;
+  }
+  .field input:focus{border-color:var(--primary);}
+  .presets{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;}
+  .preset{
+    flex:1;min-width:104px;padding:10px 8px;border:1.5px solid var(--line);background:var(--input-bg);
+    border-radius:10px;color:var(--text);cursor:pointer;min-height:52px;
+    font-weight:600;font-family:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+    line-height:1.3;
+  }
+  .preset-name{font-size:13px;font-weight:700;}
+  .preset-time{font-size:11px;color:var(--text-soft);font-weight:500;}
+  .preset:hover{border-color:var(--primary);color:var(--primary-deep);background:var(--chip-bg-strong);}
+  .preset:active{background:var(--chip-bg);}
+
+  /* ============ 自定义预设（4 个，存本机） ============ */
+  .custom-block{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);}
+  .custom-title{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-soft);font-weight:600;margin-bottom:10px;}
+  .custom-title svg{width:15px;height:15px;color:var(--primary-deep);flex:none;}
+  .custom-presets{display:flex;gap:8px;flex-wrap:wrap;}
+  .preset-slot{flex:1;min-width:140px;position:relative;}
+  .preset-slot .preset{width:100%;min-height:52px;}
+  .preset-slot .preset-empty{background:var(--input-bg);border-style:dashed;color:var(--text-soft);}
+  .preset-edit{
+    position:absolute;top:4px;right:4px;width:26px;height:26px;border:none;border-radius:50%;
+    background:var(--chip-bg);color:var(--primary-deep);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .preset-edit svg{width:13px;height:13px;}
+  .preset-edit:active{transform:scale(.94);}
+  .preset-edit-form{
+    flex:1 1 100%;width:100%;border:1.5px solid var(--primary);border-radius:12px;background:var(--chip-bg-strong);
+    padding:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;
+  }
+  .pf-field{flex:1;min-width:86px;}
+  .pf-field label{display:block;font-size:12px;color:var(--text-soft);margin-bottom:4px;}
+  .pf-field input{
+    width:100%;font-size:16px;padding:9px 10px;border:1.5px solid var(--line);border-radius:9px;
+    background:var(--card);color:var(--text);outline:none;min-height:44px;font-family:inherit;
+  }
+  .pf-field input:focus{border-color:var(--primary);}
+  .pf-name{flex:1 1 100%;}
+  .pf-actions{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap;}
+  .pf-btn{
+    min-height:44px;padding:9px 16px;border:none;border-radius:10px;font-size:14px;font-weight:700;
+    cursor:pointer;font-family:inherit;color:#fff;background:var(--primary-deep);
+  }
+  .pf-btn-ghost{background:var(--card);color:var(--text-soft);border:1.5px solid var(--line);}
+  .error{color:var(--danger);font-size:13px;margin-top:10px;min-height:18px;font-weight:500;}
+
+  /* ============ 按钮 ============ */
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:7px;
+    border:none;border-radius:12px;cursor:pointer;font-size:15px;font-weight:700;
+    min-height:48px;padding:10px 18px;color:#fff;background:var(--primary-deep);
+    font-family:inherit;transition:opacity .15s;
+  }
+  .btn:active{transform:scale(.98);}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn svg{width:18px;height:18px;flex:none;}
+  .btn-ghost{background:var(--chip-bg);color:var(--primary-deep);}
+  .btn-ghost:hover{background:#d9f2e7;}
+  .btn-line{background:var(--card);color:var(--text);border:1.5px solid var(--line);}
+  .btn-line:hover{border-color:var(--primary);color:var(--primary-deep);}
+  .btn-start{width:100%;margin-top:14px;background:var(--primary-deep);}
+  .btn-start:hover{background:#0b9a68;}
+
+  /* ============ 计时主区域 ============ */
+  .timer-center{display:flex;flex-direction:column;align-items:center;gap:10px;}
+  .phase-chip{
+    display:inline-flex;align-items:center;gap:7px;padding:6px 16px;border-radius:999px;
+    background:var(--chip-bg);color:var(--primary-deep);font-size:14px;font-weight:700;
+  }
+  .phase-chip .dot{width:8px;height:8px;border-radius:50%;background:var(--primary);animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+  .ring-box{position:relative;width:min(76vw,300px);height:min(76vw,300px);margin-top:4px;}
+  .ring-box svg{width:100%;height:100%;transform:rotate(-90deg);}
+  .ring-track,.ring-bar{fill:none;stroke-width:14;stroke-linecap:round;}
+  .ring-track{stroke:var(--ring-track);}
+  .ring-bar{stroke:var(--primary);transition:stroke-dashoffset .3s linear;}
+  .ring-time{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  }
+  .time{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    font-size:clamp(46px,13vw,82px);font-weight:800;letter-spacing:1px;line-height:1;
+    font-variant-numeric:tabular-nums;color:var(--text);
+  }
+  .time-sub{font-size:13px;color:var(--text-soft);margin-top:10px;text-align:center;padding:0 8px;}
+  .controls{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;}
+  .controls .btn{flex:1;min-width:130px;}
+
+  /* ============ 使用说明（折叠） ============ */
+  details{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:6px 16px;}
+  summary{
+    cursor:pointer;list-style:none;display:flex;align-items:center;gap:8px;
+    font-size:14px;font-weight:600;color:var(--text-soft);padding:10px 0;
+  }
+  summary::-webkit-details-marker{display:none;}
+  summary .chev{width:16px;height:16px;color:var(--text-soft);transition:transform .2s;flex:none;}
+  details[open] .chev{transform:rotate(90deg);}
+  .tips{padding:2px 2px 14px;font-size:14px;color:var(--text);}
+  .tips li{margin:8px 0 8px 20px;line-height:1.7;}
+
+  /* ============ 休息弹窗（右下角自动弹出） ============ */
+  #restPopup{
+    position:fixed;right:16px;bottom:16px;z-index:99999;
+    width:min(320px,calc(100vw - 32px));
+    background:var(--rest-bg);color:var(--rest-text);
+    border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25);
+    padding:18px 18px calc(18px + env(safe-area-inset-bottom));
+    display:none;flex-direction:column;align-items:center;text-align:center;
+    user-select:none;-webkit-user-select:none;
+  }
+  #restPopup.show{display:flex;animation:popIn .3s ease;}
+  @keyframes popIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+  .eye-badge{width:40px;height:40px;color:var(--rest-sub);margin-bottom:10px;}
+  .rest-title{font-size:16px;font-weight:800;margin-bottom:4px;}
+  .rest-sub{font-size:12px;color:var(--rest-sub);margin-bottom:14px;}
+  .rest-time{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+    font-size:52px;font-weight:800;line-height:1;
+    font-variant-numeric:tabular-nums;
+  }
+  .rest-bar{width:100%;height:6px;background:rgba(255,255,255,.18);border-radius:999px;margin-top:16px;overflow:hidden;}
+  .rest-bar i{display:block;height:100%;width:100%;background:var(--primary);border-radius:999px;transition:width .3s linear;}
+  .skip-rest{
+    margin-top:16px;background:transparent;border:1.5px solid rgba(255,255,255,.35);
+    color:var(--rest-text);padding:10px 26px;border-radius:999px;font-size:14px;font-weight:700;
+    min-height:44px;cursor:pointer;font-family:inherit;transition:all .2s;
+  }
+  .skip-rest:disabled{opacity:.35;cursor:not-allowed;}
+  .skip-rest:not(:disabled){border-color:var(--primary);color:var(--primary);background:rgba(52,211,153,.08);}
+  .rest-note{margin-top:10px;font-size:11px;color:rgba(236,253,245,.55);min-height:14px;}
+
+  /* ============ 独立休息窗口（rest=1 整窗模式） ============ */
+  #restWinUi{
+    position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+    background:var(--rest-bg);color:var(--rest-text);text-align:center;padding:24px;
+    user-select:none;-webkit-user-select:none;
+  }
+  body.popup-win .wrap{display:none;}
+  body.popup-win #restWinUi{display:flex;}
+  #restWinUi .rest-time{font-size:clamp(64px,18vw,110px);}
+  #restWinUi .rest-bar{max-width:340px;}
+  #restWinUi .rest-note{font-size:12px;}
+
+  /* ============ 移动端适配 ============ */
+  @media (max-width:767px){
+    .wrap{padding:16px 12px 36px;}
+    .card{padding:16px;}
+    .controls .btn{min-width:100%;}
+    h1{font-size:20px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- (1) 标题 + 今日统计 -->
+  <header>
+    <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+    <h1 data-i18n="appTitle">用眼时长提示器</h1>
+  </header>
+  <div class="stats">
+    <span class="btns">
+      <button class="link-btn" id="langBtn" data-i18n-title="langTitle" title="切换语言"><span id="langBtnTxt">中</span><span class="mini">EN</span></button>
+      <button class="link-btn" id="themeBtn" data-i18n-title="themeTitle" title="切换主题"><span id="themeBtnTxt">浅色</span></button>
+      <button class="link-btn" id="exportBtn" data-i18n="exportBtn" title="导出 JSON 备份">导出备份</button>
+      <button class="link-btn" id="importBtn" data-i18n="importBtn" title="从备份恢复">导入恢复</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </span>
+  </div>
+
+  <!-- 顶部提醒横幅：距离过近 / 眨眼提醒 / 多标签接管 -->
+  <div class="notice-bar" id="noticeBar" role="status" aria-live="polite">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+    <span id="noticeText"></span>
+  </div>
+  <div class="slave-bar" id="slaveBar">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>
+    <span id="slaveText"></span>
+  </div>
+
+  <!-- (2) 时长设置区 -->
+  <section class="card">
+    <h2>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9"/>
+        <path d="M12 7v5l3 2"/>
+      </svg>
+      <span data-i18n="durTitle">时长设置</span>
+    </h2>
+    <div class="row">
+      <div class="field">
+        <label for="workMin" data-i18n="workLabel">用眼时长（分钟）</label>
+        <input id="workMin" type="number" min="0.1" step="any" inputmode="decimal" value="25">
+      </div>
+      <div class="field">
+        <label for="restMin" data-i18n="restLabel">休息时长（分钟）</label>
+        <input id="restMin" type="number" min="0.1" step="any" inputmode="decimal" value="5">
+      </div>
+    </div>
+    <div class="presets">
+      <button class="preset" data-work="25" data-rest="5"><span class="preset-name" data-i18n="pTomato">番茄</span><span class="preset-time" data-i18n="pTomatoT">25分钟 / 5分钟</span></button>
+      <button class="preset" data-work="45" data-rest="10"><span class="preset-name" data-i18n="pClass">上课</span><span class="preset-time" data-i18n="pClassT">45分钟 / 10分钟</span></button>
+      <button class="preset" data-work="60" data-rest="15"><span class="preset-name" data-i18n="pDeep">深度</span><span class="preset-time" data-i18n="pDeepT">60分钟 / 15分钟</span></button>
+      <button class="preset" data-work="20" data-rest="0.33" data-i18n-title="pGlanceTip" title="用眼 20 分钟，远眺 20 米外 20 秒（20-20-20 法则）"><span class="preset-name" data-i18n="pGlance">远眺</span><span class="preset-time" data-i18n="pGlanceT">20分钟 / 20秒</span></button>
+    </div>
+    <!-- 自定义预设：用户可自存 4 个，保存在本机 localStorage -->
+    <div class="custom-block">
+      <div class="custom-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+      <span data-i18n="customTitle">自定义预设（保存在本机）</span>
+      </div>
+      <div class="custom-presets" id="customPresets"></div>
+    </div>
+    <!-- 高级设置：语言 / 主题 / 距离提醒 / 眨眼提醒 -->
+    <div class="adv-row">
+      <button class="adv-chip" id="advThemeBtn" type="button" title="浅色 / 深色 / 跟随系统">
+        <svg id="themeIco" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <span id="themeTxt">跟随系统</span>
+      </button>
+      <button class="adv-chip" id="advCamBtn" type="button" title="开启后使用摄像头检测屏幕距离">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+        <span data-i18n="advCam">距离提醒</span><span class="state" id="camState">关</span>
+      </button>
+      <button class="adv-chip" id="advBlinkBtn" type="button" title="定时提醒眨眼，湿润眼睛">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><path d="M9 12h.01M15 12h.01"/></svg>
+        <span data-i18n="advBlink">眨眼提醒</span><span class="state" id="blinkState">关</span>
+      </button>
+      <!-- 触发距离：分笔记本 / 台式机两套配置（人眼-屏幕常见范围 30–100cm） -->
+      <div class="adv-dist" id="distWrap" hidden>
+        <div class="device-switch">
+          <button class="dev-chip" id="devLaptopBtn" type="button" data-dev="laptop">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M2 20h20"/></svg>
+            <span data-i18n="devLaptop">笔记本</span>
+          </button>
+          <button class="dev-chip" id="devDesktopBtn" type="button" data-dev="desktop">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            <span data-i18n="devDesktop">台式机</span>
+          </button>
+        </div>
+        <div class="dist-slider-row">
+          <label for="distRange" data-i18n="distLabel">触发距离</label>
+          <input type="range" id="distRange" min="30" max="100" step="5" value="40">
+          <span class="dist-val" id="distVal">40cm</span>
+        </div>
+      </div>
+      <div class="dist-hint" id="distHint" hidden data-i18n="distHint">数值越大越灵敏：离屏更远也会提醒</div>
+      <div class="dist-dbg" id="camDbg" hidden></div>
+    </div>
+    <div class="error" id="errMsg"></div>
+    <button class="btn btn-start" id="startBtn">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+      <span data-i18n="startBtn">开始</span>
+    </button>
+  </section>
+
+  <!-- (3) 计时主区域 -->
+  <section class="card">
+    <div class="timer-center">
+      <span class="phase-chip"><span class="dot" id="phaseDot"></span><span id="phaseLabel">准备开始</span></span>
+      <div class="ring-box">
+        <svg viewBox="0 0 200 200" aria-hidden="true">
+          <circle class="ring-track" cx="100" cy="100" r="86"/>
+          <circle class="ring-bar" id="ringBar" cx="100" cy="100" r="86"/>
+        </svg>
+        <div class="ring-time">
+          <div class="time" id="timeText">25:00</div>
+          <div class="time-sub" id="timeSub">设置时长后点击「开始」</div>
+        </div>
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn btn-ghost" id="pauseBtn" disabled>
+        <svg id="icoPause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        <svg id="icoPlay" viewBox="0 0 24 24" fill="currentColor" style="display:none" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        <span id="pauseTxt" data-i18n="pauseBtn">暂停</span>
+      </button>
+      <button class="btn btn-line" id="skipBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M6 5l10 7-10 7z"/><path d="M17 5h2.2v14H17z"/></svg>
+        <span data-i18n="skipPhase">跳过本阶段</span>
+      </button>
+      <button class="btn btn-line" id="resetBtn" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4L3 8"/><path d="M3 3v5h5"/></svg>
+        <span data-i18n="resetBtn">重置</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- (4) 使用说明 -->
+  <details>
+    <summary>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+      <span data-i18n="helpTitle">使用说明（点击展开）</span>
+    </summary>
+    <ul class="tips">
+      <li data-i18n-html="tip1"><b>20-20-20 法则：</b>每用眼 20 分钟，远眺 20 米以外的远处 20 秒，让睫状肌放松。</li>
+      <li data-i18n-html="tip2">用眼倒计时归零后进入<b>休息</b>：优先弹出<b>独立休息小窗口</b>（大号倒计时悬浮显示，切到别的窗口也能看到，不受主页标签限制）；若浏览器拦截弹窗，则自动在页面右下角弹出休息卡片。两种方式都会显示倒计时与「跳过休息」按钮，休息至少完成 80% 才能跳过；刷新/关闭页面会被拦截提示，回来后继续从时间戳计时。</li>
+      <li data-i18n-html="tip3">休息时建议<b>起身走动、远眺窗外</b>，不要看手机。</li>
+      <li data-i18n-html="tip4">建议按 25分钟/5分钟、45分钟/10分钟、60分钟/15分钟的番茄节奏，或「远眺 20分钟/20秒」的 20-20-20 法则使用；久坐人群每 1 小时起身活动一次。</li>
+      <li data-i18n-html="tip5">数据保存在浏览器本地（localStorage），刷新页面计时自动继续，可随时「导出备份」防止丢失。</li>
+    </ul>
+  </details>
+
+</div>
+
+<!-- 品牌水印（右下角固定，纯文字，半透明，不遮挡操作） -->
+<div class="brand-watermark">xuduodoggg</div>
+
+<!-- 休息弹窗（右下角自动弹出，含倒计时与跳过休息按钮） -->
+<div id="restPopup" role="status" aria-live="polite" aria-labelledby="restTitle">
+  <svg class="eye-badge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+  <div class="rest-title" id="restTitle" data-i18n="restTitle">眼睛休息一下，看看远处</div>
+  <div class="rest-sub" data-i18n="restSub">放松睫状肌，起身走动，别让屏幕占据视线</div>
+  <div class="rest-time" id="restTime">05:00</div>
+  <div class="rest-bar"><i id="restBar"></i></div>
+  <button class="skip-rest" id="skipRestBtn" disabled><span data-i18n="skipRest">跳过休息</span></button>
+  <div class="rest-note" id="restNote">休息进行到 80% 后可用「跳过休息」</div>
+</div>
+
+<!-- 独立休息窗口 UI：rest=1 模式整窗显示（默认隐藏），脱离主页标签独立弹出 -->
+<div id="restWinUi">
+  <svg class="eye-badge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+  <div class="rest-title" data-i18n="restTitle">眼睛休息一下，看看远处</div>
+  <div class="rest-sub" data-i18n="restWinSub">这个窗口独立于主页面，切走也能看到倒计时</div>
+  <div class="rest-time" id="restWinTime">05:00</div>
+  <div class="rest-bar"><i id="restWinBar"></i></div>
+  <button class="skip-rest" id="restWinSkip" disabled><span data-i18n="skipRest">跳过休息</span></button>
+  <div class="rest-note" id="restWinNote">休息进行到 80% 后可用「跳过休息」</div>
+</div>
+
+<!-- 护眼助手窗口 UI：helper=1 模式整窗显示（默认隐藏），用眼期间的独立提醒窗口 -->
+<div id="helperWinUi">
+  <svg class="eye-badge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/>
+    <circle cx="12" cy="12" r="3"/>
+  </svg>
+  <div class="helper-title" data-i18n="helperTitle">护眼助手</div>
+  <div class="helper-sub" data-i18n="helperSub">用眼期间的距离与眨眼提醒，独立显示</div>
+  <div class="helper-dist" id="helperDist">
+    <div class="helper-dot" id="helperDot"></div>
+    <div class="helper-text" id="helperText">距离正常</div>
+  </div>
+  <div class="helper-meter"><i id="helperMeter"></i></div>
+  <div class="helper-hint" id="helperHint">眨眼提示区</div>
+  <div class="helper-note" data-i18n="helperNote">窗口可随时关闭，主页面仍会继续计时与提醒</div>
+</div>
+
+
+<script>
+(function(){
+'use strict';
+
+/* ================= 语言（中 / EN） ================= */
+var lang = loadJSON('wb_eye_lang_v1', 'zh');
+var I18N = {
+  zh: {
+    appTitle:'用眼时长提示器', langTitle:'切换语言', themeTitle:'切换主题',
+    exportBtn:'导出备份', importBtn:'导入恢复',
+    durTitle:'时长设置', workLabel:'用眼时长（分钟）', restLabel:'休息时长（分钟）',
+    pTomato:'番茄', pTomatoT:'25分钟 / 5分钟', pClass:'上课', pClassT:'45分钟 / 10分钟',
+    pDeep:'深度', pDeepT:'60分钟 / 15分钟', pGlance:'远眺', pGlanceT:'20分钟 / 20秒',
+    pGlanceTip:'用眼 20 分钟，远眺 20 米外 20 秒（20-20-20 法则）',
+    customTitle:'自定义预设（保存在本机）',
+    advCam:'距离提醒', advBlink:'眨眼提醒', distLabel:'触发距离',
+    devLaptop:'笔记本', devDesktop:'台式机',
+    distHint:'数值越大越灵敏：离屏更远也会提醒；计时中不可修改',
+    distLocked:'计时进行中不可修改触发距离，请暂停或重置后再调',
+    camDbg:'肤色占比 {0} / 阈值 {1}（{2}cm 触发）',
+    helperTitle:'护眼助手', helperSub:'用眼期间的距离与眨眼提醒，独立显示',
+    helperNote:'窗口可随时关闭，主页面仍会继续计时与提醒',
+    helperOk:'距离正常', helperNear:'太近了，往后坐一点', helperBlink:'记得眨眼，让眼睛保持湿润',
+    startBtn:'开始', pauseBtn:'暂停', resumeBtn:'继续', skipPhase:'跳过本阶段', resetBtn:'重置',
+    helpTitle:'使用说明（点击展开）',
+    tip1:'<b>20-20-20 法则：</b>每用眼 20 分钟，远眺 20 米以外的远处 20 秒，让睫状肌放松。电脑屏幕与眼睛保持 50–70 厘米（约一臂远）为佳，低于 40 厘米会被「距离提醒」判定为过近；触发距离按设备分两套（笔记本默认 40cm、台式机默认 60cm），可用滑块在 30–100cm 内分别自定义。开启「距离提醒」后，开始计时会自动打开摄像头检测，休息/暂停/重置时自动关闭；开启「距离提醒」或「眨眼提醒」后，提醒会显示在独立的「护眼助手」窗口中（被浏览器拦截时自动降级为页面顶部横幅）。',
+    tip2:'用眼倒计时归零后进入<b>休息</b>：优先弹出<b>独立休息小窗口</b>（大号倒计时悬浮显示，切到别的窗口也能看到，不受主页标签限制）；若浏览器拦截弹窗，则自动在页面右下角弹出休息卡片。两种方式都会显示倒计时与「跳过休息」按钮，休息至少完成 80% 才能跳过；刷新/关闭页面会被拦截提示，回来后继续从时间戳计时。',
+    tip3:'休息时建议<b>起身走动、远眺窗外</b>，不要看手机。',
+    tip4:'建议按 25分钟/5分钟、45分钟/10分钟、60分钟/15分钟的番茄节奏，或「远眺 20分钟/20秒」的 20-20-20 法则使用；久坐人群每 1 小时起身活动一次。',
+    tip5:'数据保存在浏览器本地（localStorage），刷新页面计时自动继续，可随时「导出备份」防止丢失。',
+    restTitle:'眼睛休息一下，看看远处', restSub:'放松睫状肌，起身走动，别让屏幕占据视线',
+    restWinSub:'这个窗口独立于主页面，切走也能看到倒计时',
+    skipRest:'跳过休息', restNote80:'休息进行到 80% 后可用「跳过休息」', restNoteCan:'已休息超过 80%，可以跳过',
+    restWinDone:'休息完成，正在回到用眼阶段', restWinSkipped:'已请求跳过，即将关闭',
+    phaseReady:'准备开始', phaseWork:'用眼中', phaseRest:'休息中', phasePaused:'已暂停 · 用眼中',
+    subIdle:'设置时长后点击「开始」', subWork:'专注用眼，结束前 10 秒有提示',
+    titleWork:'用眼', titleRest:'休息',
+    errInput:'请输入大于 0 的时长（分钟），支持小数，如 25 或 0.5',
+    errCustom:'自定义预设的时长必须大于 0（分钟），支持小数',
+    appliedPreset:'已应用自定义预设「{0}」',
+    importOk:'导入成功', importFail:'导入失败：文件格式不正确',
+    resetConfirm:'确定重置当前计时吗？',
+    name:'名称', workMinute:'用眼（分钟）', restMinute:'休息（分钟）',
+    save:'保存', cancel:'取消', clear:'清空', presetN:'预设{0}', clickSet:'点击设置',
+    editThis:'编辑此预设', clickApply:'点击应用',
+    themeAuto:'跟随系统', themeLight:'浅色', themeDark:'深色',
+    camOn:'开', camOff:'关',
+    camError:'摄像头不可用：请使用 HTTPS 线上版本并允许摄像头权限',
+    camNear:'眼睛离屏幕太近了，请往后坐一点', blinkNow:'记得眨眼，让眼睛保持湿润',
+    slaveText:'另一个标签页正在计时，本页已暂停接管，请关闭本页'
+  },
+  en: {
+    appTitle:'Eye Rest Timer', langTitle:'Switch language', themeTitle:'Switch theme',
+    exportBtn:'Export', importBtn:'Import',
+    durTitle:'Duration', workLabel:'Work (min)', restLabel:'Break (min)',
+    pTomato:'Pomodoro', pTomatoT:'25 min / 5 min', pClass:'Class', pClassT:'45 min / 10 min',
+    pDeep:'Deep', pDeepT:'60 min / 15 min', pGlance:'Glance', pGlanceT:'20 min / 20 sec',
+    pGlanceTip:'20-20-20: work 20 min, gaze 20 m away for 20 sec',
+    customTitle:'Custom presets (saved locally)',
+    advCam:'Distance alert', advBlink:'Blink reminder', distLabel:'Trigger distance',
+    devLaptop:'Laptop', devDesktop:'Desktop',
+    distHint:'Higher = more sensitive: alerts from farther away; locked while timing',
+    distLocked:'Trigger distance is locked while timing — pause or reset to adjust',
+    camDbg:'Skin ratio {0} / threshold {1} (triggers at {2}cm)',
+    helperTitle:'Eye Care Assistant', helperSub:'Distance & blink alerts while focusing',
+    helperNote:'You can close this window anytime; the timer & alerts continue on the main page',
+    helperOk:'Distance OK', helperNear:'Too close — lean back', helperBlink:'Blink to keep your eyes moist',
+    startBtn:'Start', pauseBtn:'Pause', resumeBtn:'Resume', skipPhase:'Skip phase', resetBtn:'Reset',
+    helpTitle:'Help (tap to expand)',
+    tip1:'<b>20-20-20 rule:</b> every 20 min, gaze at something 20 m away for 20 sec to relax your eye muscles. Keep the screen 50–70 cm (about an arm\u2019s length) away; under 40 cm triggers the Distance alert. Trigger distance is stored separately per device (Laptop defaults to 40 cm, Desktop to 60 cm) and customisable with the slider (30–100 cm). With Distance alert on, the camera starts automatically when timing begins and stops during breaks/pause/reset. When Distance alert or Blink reminder is on, alerts show in a standalone Eye Care Assistant window (falling back to an in-page banner if the popup is blocked).',
+    tip2:'When the focus countdown hits zero, <b>rest</b> begins: a <b>standalone rest window</b> pops up first (big countdown stays visible even if you switch tabs); if the browser blocks it, a rest card appears at the bottom-right instead. Both show the countdown and a Skip button, but you can only skip after 80% of the break; refreshing or closing the page is blocked so the break cannot be bypassed, and the timer resumes from its timestamp.',
+    tip3:'During breaks, <b>stand up, move around and look out the window</b> — not at your phone.',
+    tip4:'Try pomodoro rhythms like 25/5, 45/10, 60/15 min, or the 20-20-20 rule; if you sit for long, stand up once an hour.',
+    tip5:'Data stays in your browser (localStorage); the timer survives refreshes. Export backups regularly.',
+    restTitle:'Rest your eyes, look far away', restSub:'Relax, move around, give the screen a break',
+    restWinSub:'This window is independent — the countdown stays visible anywhere',
+    skipRest:'Skip break', restNote80:'Skip available after 80% of the break', restNoteCan:'80% done — you may skip',
+    restWinDone:'Break finished, back to focusing', restWinSkipped:'Skip requested, closing…',
+    phaseReady:'Ready', phaseWork:'Focusing', phaseRest:'Resting', phasePaused:'Paused · Focusing',
+    subIdle:'Set a duration and press Start', subWork:'Focus — soft chime 10s before the end',
+    titleWork:'Focus', titleRest:'Rest',
+    errInput:'Enter a duration greater than 0 (min), decimals OK (e.g. 25 or 0.5)',
+    errCustom:'Custom preset durations must be greater than 0 (min)',
+    appliedPreset:'Applied preset "{0}"',
+    importOk:'Imported', importFail:'Import failed: invalid file format',
+    resetConfirm:'Reset the current timer?',
+    name:'Name', workMinute:'Work (min)', restMinute:'Break (min)',
+    save:'Save', cancel:'Cancel', clear:'Clear', presetN:'Preset {0}', clickSet:'Tap to set',
+    editThis:'Edit this preset', clickApply:'Tap to apply',
+    themeAuto:'Auto', themeLight:'Light', themeDark:'Dark',
+    camOn:'On', camOff:'Off',
+    camError:'Camera unavailable: use the HTTPS online version and allow camera access',
+    camNear:'Too close to the screen — lean back', blinkNow:'Blink to keep your eyes moist',
+    slaveText:'Another tab is running the timer; this page handed over control. Close this page.'
+  }
+};
+function t(key, args){
+  var s = (I18N[lang] && I18N[lang][key]) || I18N.zh[key] || key;
+  if(args){ for(var i = 0; i < args.length; i++){ s = s.split('{' + i + '}').join(args[i]); } }
+  return s;
+}
+function applyLang(){
+  document.documentElement.lang = (lang === 'en') ? 'en' : 'zh-CN';
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n]'), function(el){
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-html]'), function(el){
+    el.innerHTML = t(el.getAttribute('data-i18n-html'));
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-i18n-title]'), function(el){
+    el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
+  });
+  var langBtnTxt = document.getElementById('langBtnTxt');
+  if(langBtnTxt){ langBtnTxt.textContent = (lang === 'zh') ? '中' : 'EN'; }
+  updateThemeTxt();
+  if(typeof phase !== 'undefined' && typeof renderPhaseUI === 'function'){ renderPhaseUI(); }
+  if(typeof phase !== 'undefined' && typeof updateRestUI === 'function' && phase === 'rest'){ updateRestUI(remainMs); }
+  if(typeof customList !== 'undefined' && typeof renderCustom === 'function'){ renderCustom(); }
+}
+
+/* ================= 主题（跟随系统 / 浅色 / 深色） ================= */
+var theme = loadJSON('wb_eye_theme_v1', 'auto');
+var mql = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+function applyTheme(){
+  var dark = (theme === 'dark') || (theme === 'auto' && mql && mql.matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if(meta){ meta.setAttribute('content', dark ? '#0f172a' : '#f7faf8'); }
+  updateThemeTxt();
+}
+function updateThemeTxt(){
+  var map = {auto:t('themeAuto'), light:t('themeLight'), dark:t('themeDark')};
+  var el = document.getElementById('themeTxt');
+  if(el){ el.textContent = map[theme] || map.auto; }
+}
+function cycleTheme(){
+  theme = (theme === 'auto') ? 'light' : ((theme === 'light') ? 'dark' : 'auto');
+  saveJSON('wb_eye_theme_v1', theme);
+  applyTheme();
+}
+if(mql && mql.addEventListener){ mql.addEventListener('change', applyTheme); }
+
+/* ================= 独立休息窗口（rest=1 模式） ================= */
+var REST_STATE_KEY = 'wb_eye_rest_state_v1';    // 主页面 → 独立窗口共享的休息状态
+var REST_ACTION_KEY = 'wb_eye_rest_action_v1';  // 独立窗口 → 主页面 的指令通道
+var IS_REST_WIN = /[?&]rest=1\b/.test(location.search);
+
+/* 独立窗口：整窗渲染休息倒计时，通过 localStorage 与主页面通信。
+   倒计时与主页面完全同步（同样用时间戳计算），主页最小化/切走也不受影响。 */
+function initRestWin(){
+  document.body.classList.add('popup-win');
+  applyTheme();
+  applyLang();
+  var winTime = document.getElementById('restWinTime');
+  var winBar = document.getElementById('restWinBar');
+  var winSkip = document.getElementById('restWinSkip');
+  var winNote = document.getElementById('restWinNote');
+
+  function render(){
+    var st = loadJSON(REST_STATE_KEY, null);
+    if(!st){ window.close(); return; }                 // 主页面已结束休息 → 关闭窗口
+    var remain = st.endAt - Date.now();
+    var pct = st.totalMs > 0 ? Math.max(0, remain / st.totalMs) : 0;
+    if(remain <= 0){
+      winTime.textContent = '00:00';
+      winNote.textContent = t('restWinDone');
+      return;
+    }
+    winTime.textContent = fmt(remain);
+    winBar.style.width = ((1 - pct) * 100).toFixed(1) + '%';
+    var canSkip = (1 - pct) >= 0.8;
+    winSkip.disabled = !canSkip;
+    winNote.textContent = canSkip ? t('restNoteCan') : t('restNote80');
+  }
+  render();
+  setInterval(render, 250);
+
+  winSkip.addEventListener('click', function(){
+    if(winSkip.disabled) return;
+    try{ localStorage.setItem(REST_ACTION_KEY, JSON.stringify({type:'skip', ts:Date.now()})); }catch(e){}
+    winNote.textContent = t('restWinSkipped');
+    setTimeout(function(){ window.close(); }, 600);
+  });
+  /* 主页面结束休息并清除状态时，自动关闭本窗口 */
+  window.addEventListener('storage', function(e){
+    if(e.key === REST_STATE_KEY && !e.newValue){ window.close(); }
+  });
+}
+
+if(IS_REST_WIN){ initRestWin(); return; }
+
+/* ================= 护眼助手独立窗口（helper=1 模式） =================
+   用眼期间的距离提醒与眨眼提醒，显示在独立小窗口中；
+   主页面把检测结果写入 wb_eye_helper_state_v1，本窗口轮询渲染。 */
+var HELPER_STATE_KEY = 'wb_eye_helper_state_v1';
+var IS_HELPER_WIN = /[?&]helper=1\b/.test(location.search);
+function initHelperWin(){
+  document.body.classList.add('helper-win');
+  applyTheme();
+  applyLang();
+  var dot = document.getElementById('helperDot');
+  var text = document.getElementById('helperText');
+  var meter = document.getElementById('helperMeter');
+  var hint = document.getElementById('helperHint');
+  var lastBlinkTs = 0;
+  var hintClearAt = 0;
+  var lastNear = false;
+
+  function render(){
+    var st = loadJSON(HELPER_STATE_KEY, null);
+    if(!st){ return; }                       // 主页面未开助手（未用眼），保持待机
+    var near = !!st.near;
+    var ratio = Math.max(0, Math.min(1, +st.ratio || 0));
+    /* 距离指示：绿=正常，黄=偏近，红=过近 */
+    dot.className = 'helper-dot' + (near ? ' danger' : (ratio > 0.5 ? ' warn' : ''));
+    meter.className = near ? 'warn' : '';
+    meter.style.width = (ratio * 100).toFixed(0) + '%';
+    if(near !== lastNear){
+      lastNear = near;
+      text.textContent = near ? t('helperNear') : t('helperOk');
+    }
+    /* 眨眼提示：主页面触发后显示约 6 秒 */
+    var bt = +st.blinkTs || 0;
+    if(bt > lastBlinkTs){
+      lastBlinkTs = bt;
+      hintClearAt = Date.now() + 6000;
+      hint.textContent = t('helperBlink');
+      hint.style.opacity = 1;
+    } else if(Date.now() > hintClearAt){
+      hint.textContent = '';
+      hint.style.opacity = 0;
+    }
+  }
+  render();
+  setInterval(render, 300);
+}
+
+if(IS_HELPER_WIN){ initHelperWin(); return; }
+
+/* ================= 元素引用 ================= */
+var $ = function(id){ return document.getElementById(id); };
+var els = {
+  workMin:$('workMin'), restMin:$('restMin'), errMsg:$('errMsg'),
+  startBtn:$('startBtn'), pauseBtn:$('pauseBtn'), pauseTxt:$('pauseTxt'),
+  icoPause:$('icoPause'), icoPlay:$('icoPlay'),
+  skipBtn:$('skipBtn'), resetBtn:$('resetBtn'),
+  phaseLabel:$('phaseLabel'), phaseDot:$('phaseDot'),
+  timeText:$('timeText'), timeSub:$('timeSub'), ringBar:$('ringBar'),
+  restPopup:$('restPopup'), restTime:$('restTime'), restBar:$('restBar'),
+  skipRestBtn:$('skipRestBtn'), restNote:$('restNote'),
+  exportBtn:$('exportBtn'), importBtn:$('importBtn'), importFile:$('importFile')
+};
+
+var RING_R = 86;                                  // 进度环半径
+var RING_C = 2 * Math.PI * RING_R;                // 周长（stroke-dasharray 基准）
+
+/* ================= localStorage 键（统一 wb_ 前缀） ================= */
+var LS_KEY = {
+  settings:'wb_eye_settings_v1',
+  timer:'wb_eye_timer_v1'
+};
+
+function loadJSON(key, fallback){
+  try{ var v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
+  catch(e){ return fallback; }
+}
+function saveJSON(key, val){
+  try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){}
+}
+
+/* ================= 设置 ================= */
+var settings = Object.assign({workMin:25, restMin:5}, loadJSON(LS_KEY.settings, {}));
+
+function todayStr(){
+  var d = new Date();
+  return d.getFullYear() + '-' +
+    String(d.getMonth()+1).padStart(2,'0') + '-' +
+    String(d.getDate()).padStart(2,'0');
+}
+
+/* ================= 计时运行状态 =================
+   phase: idle | work | rest
+   pausedFlag: 是否暂停（仅 work 可暂停，休息期间遮罩锁死不可暂停）
+   endAt: 阶段结束时间戳（Date.now() 计算，防后台漂移）
+   totalMs: 本阶段总时长；remainMs: 剩余时长 */
+var phase = 'idle';
+var pausedFlag = false;
+var endAt = 0, totalMs = 0, remainMs = 0;
+var tickTimer = null;
+var beep10Done = false, beep30Done = false;
+var lastTitleSec = -1;
+
+/* ================= Web Audio：柔和提示音（无外部音频文件） ================= */
+var audioCtx = null;
+function beep(freq, durMs, volume, type){
+  try{
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if(audioCtx.state === 'suspended'){ audioCtx.resume(); }
+    var osc = audioCtx.createOscillator();
+    var g = audioCtx.createGain();
+    var t0 = audioCtx.currentTime;
+    osc.type = type || 'sine';
+    osc.frequency.value = freq || 520;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(volume || 0.12, t0 + 0.03);      // 淡入
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + durMs/1000);        // 淡出
+    osc.connect(g); g.connect(audioCtx.destination);
+    osc.start(t0); osc.stop(t0 + durMs/1000 + 0.05);
+  }catch(e){ /* 音频不可用时静默降级 */ }
+}
+function softTone(){       // 用眼结束前 10 秒：轻柔双音
+  beep(660, 500, 0.10);
+  setTimeout(function(){ beep(660, 500, 0.10); }, 700);
+}
+function restRemindTone(){ // 休息结束前 30 秒：更轻的单音
+  beep(440, 450, 0.08);
+}
+function phaseChime(){     // 阶段切换：轻快上行双音
+  beep(784, 250, 0.10);
+  setTimeout(function(){ beep(988, 350, 0.10); }, 200);
+}
+
+/* ================= 时间与进度显示 ================= */
+function fmt(ms){
+  var totalSec = Math.max(0, Math.ceil(ms / 1000));
+  var m = Math.floor(totalSec / 60), s = totalSec % 60;
+  return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+}
+function updateDisplay(ms){
+  var sec = Math.ceil(ms / 1000);
+  els.timeText.textContent = fmt(ms);
+  /* 环形进度条：随时间递减（stroke-dashoffset 由 0 → C） */
+  var ratio = totalMs > 0 ? Math.max(0, ms / totalMs) : 0;
+  els.ringBar.style.strokeDasharray = String(RING_C);
+  els.ringBar.style.strokeDashoffset = String(RING_C * (1 - ratio));
+  /* 页面标题实时显示剩余时间，切到别的窗口也能看到 */
+  if(sec !== lastTitleSec){
+    lastTitleSec = sec;
+    var label = phase === 'work' ? t('titleWork') : t('titleRest');
+    document.title = label + ' ' + fmt(ms) + ' - ' + t('appTitle');
+  }
+}
+function updateRestUI(ms){
+  els.restTime.textContent = fmt(ms);
+  var elapsed = Math.max(0, totalMs - Math.max(0, ms));
+  var pct = totalMs > 0 ? elapsed / totalMs : 0;
+  els.restBar.style.width = (pct * 100).toFixed(1) + '%';
+  /* 休息进行到 80% 后才允许跳过 */
+  var canSkip = pct >= 0.8;
+  els.skipRestBtn.disabled = !canSkip;
+  els.restNote.textContent = canSkip ? t('restNoteCan') : t('restNote80');
+}
+
+/* ================= 阶段控制 ================= */
+function startTick(){ clearTick(); tickTimer = setInterval(tick, 250); }
+function clearTick(){ if(tickTimer){ clearInterval(tickTimer); tickTimer = null; } }
+
+function tick(){
+  if(phase !== 'work' && phase !== 'rest') return;
+  if(!pausedFlag){
+    /* 核心：始终用时间戳计算剩余，切后台/切回都不会漂移 */
+    remainMs = endAt - Date.now();
+    if(remainMs <= 0){ phaseComplete(); return; }
+  }
+  updateDisplay(remainMs);
+  checkBeeps(remainMs);
+  checkBlinkReminder();
+  if(phase === 'rest'){ updateRestUI(remainMs); }
+}
+
+/* 眨眼提醒：用眼期间每 4 分钟提醒一次（无需摄像头，纯定时） */
+var blinkOn = loadJSON('wb_eye_blink_v1', false);
+var lastBlinkAt = 0;
+var BLINK_INTERVAL = 4 * 60 * 1000;
+function checkBlinkReminder(){
+  if(!blinkOn || phase !== 'work' || pausedFlag) return;
+  var now = Date.now();
+  if(lastBlinkAt === 0){ lastBlinkAt = now; return; }
+  if(now - lastBlinkAt >= BLINK_INTERVAL){
+    lastBlinkAt = now;
+    helperBlinkTs = now;               // 写入助手窗口状态
+    if(helperDismissTimer){ clearTimeout(helperDismissTimer); helperDismissTimer = null; }
+    ensureHelperWin();                 // 眨眼提醒 → 弹出护眼助手
+    pushHelperState();
+    if(!helperWinOpen()){              // 窗口被拦时页面横幅兜底
+      showNotice(t('blinkNow'), false);
+      hideNoticeSoon(6000);
+    }
+    helperScheduleClose(6000);         // 6s 后自动关闭（若距离已正常）
+    restRemindTone();                  // 轻柔提示音
+  }
+}
+function toggleBlink(){
+  blinkOn = !blinkOn;
+  saveJSON('wb_eye_blink_v1', blinkOn);
+  updateBlinkState();
+  if(!blinkOn){ hideNotice(); }
+}
+function updateBlinkState(){
+  var el = document.getElementById('blinkState');
+  if(el){ el.textContent = blinkOn ? t('camOn') : t('camOff'); }
+  document.getElementById('advBlinkBtn').classList.toggle('on', blinkOn);
+}
+
+function checkBeeps(ms){
+  if(phase === 'work'){
+    if(!beep10Done && ms <= 10000){ beep10Done = true; softTone(); }       // 用眼结束前 10 秒
+  } else if(phase === 'rest'){
+    if(!beep30Done && ms <= 30000){ beep30Done = true; restRemindTone(); } // 休息结束前 30 秒
+  }
+}
+
+/* 顶部提醒横幅 */
+var noticeTimer = null;
+function showNotice(text, danger){
+  var bar = document.getElementById('noticeBar');
+  var txt = document.getElementById('noticeText');
+  if(!bar || !txt) return;
+  txt.textContent = text;
+  bar.classList.toggle('danger', !!danger);
+  bar.classList.add('show');
+}
+function hideNoticeSoon(ms){
+  if(noticeTimer){ clearTimeout(noticeTimer); }
+  noticeTimer = setTimeout(hideNotice, ms || 6000);
+}
+function hideNotice(){
+  var bar = document.getElementById('noticeBar');
+  if(bar){ bar.classList.remove('show'); }
+  if(noticeTimer){ clearTimeout(noticeTimer); noticeTimer = null; }
+}
+
+function startWork(min){
+  clearTick();
+  phase = 'work'; pausedFlag = false;
+  totalMs = min * 60000;
+  endAt = Date.now() + totalMs;
+  remainMs = totalMs;
+  beep10Done = false; beep30Done = false; lastTitleSec = -1;
+  saveTimer();
+  renderPhaseUI();
+  updateDisplay(totalMs);
+  els.timeSub.textContent = t('subWork');
+  helperBlinkTs = 0; helperNearFlag = false; helperRatio = 0;
+  hideHelperWin();          // 新一轮开始：先收掉上一轮残留的助手窗口
+  ensureCamActive();        // 距离提醒已开启时：开始计时自动开启摄像头检测
+  startTick();
+}
+
+function startRest(min){
+  clearTick();
+  phase = 'rest'; pausedFlag = false;
+  totalMs = min * 60000;
+  endAt = Date.now() + totalMs;
+  remainMs = totalMs;
+  beep10Done = false; beep30Done = false; lastTitleSec = -1;
+  saveTimer();
+  renderPhaseUI();
+  updateDisplay(totalMs);
+  hideHelperWin();          // 进入休息：关闭护眼助手窗口（休息有独立窗口）
+  stopCam();                // 休息中无需检测：自动关闭摄像头（功能开关保持开启）
+  showRestPopup();        // 右下角自动弹出休息弹窗
+  updateRestUI(totalMs);
+  startTick();
+}
+
+/* 阶段归零：用眼 → 休息；休息 → 自动开始下一轮 */
+function phaseComplete(){
+  clearTick();
+  if(phase === 'work'){
+    phaseChime();
+    startRest(settings.restMin);
+  } else if(phase === 'rest'){
+    phaseChime();
+    hideRestPopup();      // 休息结束，收起弹窗
+    startWork(settings.workMin);
+  }
+}
+
+/* ================= 控制按钮 ================= */
+function togglePause(){
+  if(phase !== 'work') return;
+  if(!pausedFlag){
+    /* 暂停：记录剩余时长，清除时间戳 */
+    pausedFlag = true;
+    remainMs = Math.max(0, endAt - Date.now());
+    endAt = 0;
+    clearTick();
+    stopCam();              // 暂停时无需检测：关闭摄像头
+    saveTimer();
+    renderPhaseUI();
+    updateDisplay(remainMs);
+  } else {
+    /* 继续：重新以当前时间计算结束点 */
+    pausedFlag = false;
+    endAt = Date.now() + remainMs;
+    saveTimer();
+    renderPhaseUI();
+    ensureCamActive();      // 继续计时：自动重新开启摄像头
+    startTick();
+  }
+}
+
+function skipPhase(){
+  /* 用眼阶段跳过 → 直接进入休息（不计轮数） */
+  if(phase === 'work'){ startRest(settings.restMin); }
+}
+
+function resetTimer(){
+  clearTick();
+  phase = 'idle'; pausedFlag = false;
+  endAt = 0; totalMs = 0; remainMs = 0;
+  lastTitleSec = -1;
+  hideRestPopup();
+  hideHelperWin();
+  stopCam();                // 重置后无需检测：关闭摄像头
+  clearSavedTimer();
+  renderPhaseUI();
+  updateDisplay(settings.workMin * 60000);
+  els.timeSub.textContent = t('subIdle');
+  document.title = t('appTitle');
+}
+
+/* ================= 休息弹窗（右下角自动弹出，非全屏、不锁页面） ================= */
+
+/* 休息期间拦截刷新/关闭标签页：浏览器会弹出“确定要离开吗”提示，
+   防止通过 F5 / Ctrl+W 等方式跳过休息（关闭页面后回来仍会从时间戳续跑）。 */
+function blockUnload(e){
+  e.preventDefault();
+  e.returnValue = '';
+}
+function armUnloadBlock(){ window.addEventListener('beforeunload', blockUnload); }
+function disarmUnloadBlock(){ window.removeEventListener('beforeunload', blockUnload); }
+
+/* 休息弹窗：优先弹出「独立小窗口」（脱离主页标签、切走也能看到）；
+   若浏览器拦截 window.open（多数手机浏览器）或用户关掉独立窗口，
+   自动降级为页面右下角弹窗，休息计时不受任何影响。 */
+var openedRestWin = null;
+var winWatchTimer = null;
+
+function openRestWin(){
+  if(openedRestWin && !openedRestWin.closed) return true;
+  var url = location.href.split('#')[0];
+  url += (url.indexOf('?') > -1 ? '&' : '?') + 'rest=1';
+  var w = null;
+  try{
+    w = window.open(url, 'eyeRestWin',
+      'width=420,height=560,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
+  }catch(e){ w = null; }
+  if(w && !w.closed){ openedRestWin = w; return true; }
+  return false;
+}
+function stopWinWatch(){
+  if(winWatchTimer){ clearInterval(winWatchTimer); winWatchTimer = null; }
+}
+function startWinWatch(){
+  stopWinWatch();
+  winWatchTimer = setInterval(function(){
+    if(phase !== 'rest'){ stopWinWatch(); return; }
+    if(openedRestWin && openedRestWin.closed){
+      /* 用户手动关掉了独立窗口 → 页面内弹窗兜底 */
+      openedRestWin = null;
+      stopWinWatch();
+      els.restPopup.classList.add('show');
+    }
+  }, 800);
+}
+
+function showRestPopup(){
+  /* 写入跨窗口休息状态（独立窗口据此渲染倒计时） */
+  saveJSON(REST_STATE_KEY, {endAt: endAt, totalMs: totalMs, ts: Date.now()});
+  armUnloadBlock();       // 拦截刷新/关闭（防绕过休息）
+  if(openRestWin()){
+    startWinWatch();      // 独立窗口模式
+  } else {
+    els.restPopup.classList.add('show');   // 降级：页面右下角弹窗
+  }
+}
+function hideRestPopup(){
+  els.restPopup.classList.remove('show');
+  stopWinWatch();
+  try{ localStorage.removeItem(REST_STATE_KEY); }catch(e){}
+  disarmUnloadBlock();
+  if(openedRestWin && !openedRestWin.closed){
+    try{ openedRestWin.close(); }catch(e){}
+  }
+  openedRestWin = null;
+}
+
+/* ================= 护眼助手独立窗口（距离 / 眨眼提醒） =================
+   用眼开始时若开启了距离或眨眼提醒，自动弹出助手小窗；
+   主页面把检测结果写入 wb_eye_helper_state_v1，助手窗口轮询显示。 */
+var openedHelperWin = null;
+var helperWinWatchTimer = null;
+function stopHelperWatch(){
+  if(helperWinWatchTimer){ clearInterval(helperWinWatchTimer); helperWinWatchTimer = null; }
+}
+function startHelperWatch(){
+  stopHelperWatch();
+  helperWinWatchTimer = setInterval(function(){
+    if(phase !== 'work'){ stopHelperWatch(); return; }
+    if(openedHelperWin && openedHelperWin.closed){
+      /* 用户关掉助手窗口 → 清引用，页面横幅自动接管提醒 */
+      openedHelperWin = null;
+      stopHelperWatch();
+    }
+  }, 1000);
+}
+function ensureHelperWin(){
+  if(!(camOn || blinkOn)) return;                  // 两个提醒都关着就不弹
+  if(helperWinOpen()) return;                      // 已开着则复用
+  var url = location.href.split('#')[0];
+  url += (url.indexOf('?') > -1 ? '&' : '?') + 'helper=1';
+  var w = null;
+  try{
+    w = window.open(url, 'eyeHelperWin',
+      'width=380,height=520,menubar=no,toolbar=no,location=no,status=no,resizable=yes');
+  }catch(e){ w = null; }
+  if(w && !w.closed){
+    openedHelperWin = w;
+    startHelperWatch();
+  }
+}
+function hideHelperWin(){
+  if(helperDismissTimer){ clearTimeout(helperDismissTimer); helperDismissTimer = null; }
+  stopHelperWatch();
+  try{ localStorage.removeItem(HELPER_STATE_KEY); }catch(e){}
+  if(openedHelperWin && !openedHelperWin.closed){
+    try{ openedHelperWin.close(); }catch(e){}
+  }
+  openedHelperWin = null;
+}
+
+/* 助手窗口“只在提醒时出现”：过近或眨眼触发时弹出，
+   恢复正常 / 提醒结束后延迟自动关闭。 */
+var helperDismissTimer = null;
+function helperScheduleClose(ms){
+  if(helperDismissTimer){ clearTimeout(helperDismissTimer); }
+  helperDismissTimer = setTimeout(function(){
+    helperDismissTimer = null;
+    /* 距离仍过近或眨眼提示仍在展示中则不关 */
+    if(helperNearFlag || Date.now() - helperBlinkTs < 6000) return;
+    hideHelperWin();
+  }, ms);
+}
+
+/* 主页面监听独立窗口发来的指令（跳过休息） */
+window.addEventListener('storage', function(e){
+  if(e.key === REST_ACTION_KEY && e.newValue){
+    try{
+      var act = JSON.parse(e.newValue);
+      if(act && act.type === 'skip'){ skipRest(); }
+    }catch(err){}
+  }
+});
+
+/* 跳过休息：仅休息完成 ≥80% 后可用（按钮 disabled + 逻辑双保险） */
+function skipRest(){
+  if(phase !== 'rest' || els.skipRestBtn.disabled) return;
+  var elapsed = Math.max(0, totalMs - Math.max(0, remainMs));
+  var pct = totalMs > 0 ? elapsed / totalMs : 1;
+  if(pct < 0.8) return;
+  clearTick();
+  hideRestPopup();
+  startWork(settings.workMin);
+}
+
+/* ================= 计时状态持久化（刷新续跑） ================= */
+function saveTimer(){
+  if(phase === 'work' || phase === 'rest'){
+    saveJSON(LS_KEY.timer, {phase:phase, paused:pausedFlag, endAt:endAt, remainMs:remainMs, totalMs:totalMs});
+  } else {
+    clearSavedTimer();
+  }
+}
+function clearSavedTimer(){
+  try{ localStorage.removeItem(LS_KEY.timer); }catch(e){}
+}
+
+/* ================= 界面渲染 ================= */
+function renderPhaseUI(){
+  var running = phase === 'work' || phase === 'rest';
+  els.startBtn.disabled = running || isSlave;
+  els.resetBtn.disabled = phase === 'idle' || isSlave;
+  els.skipBtn.disabled = phase === 'idle' || isSlave;
+  els.pauseBtn.disabled = phase !== 'work' || isSlave;
+
+  if(phase === 'work'){
+    els.phaseLabel.textContent = pausedFlag ? t('phasePaused') : t('phaseWork');
+    els.pauseTxt.textContent = pausedFlag ? t('resumeBtn') : t('pauseBtn');
+    els.icoPause.style.display = pausedFlag ? 'none' : '';
+    els.icoPlay.style.display = pausedFlag ? '' : 'none';
+  } else if(phase === 'rest'){
+    els.phaseLabel.textContent = t('phaseRest');
+  } else {
+    els.phaseLabel.textContent = t('phaseReady');
+    els.pauseTxt.textContent = t('pauseBtn');
+    els.icoPause.style.display = '';
+    els.icoPlay.style.display = 'none';
+  }
+  updateDistLock();   // 阶段/暂停状态变化时同步滑块锁定
+}
+
+/* ================= 事件绑定 ================= */
+els.startBtn.addEventListener('click', function(){
+  var w = parseFloat(els.workMin.value), r = parseFloat(els.restMin.value);
+  /* 输入校验：必须是大于 0 的正数（支持小数），否则拒绝开始 */
+  if(!isFinite(w) || w <= 0 || !isFinite(r) || r <= 0){
+    els.errMsg.textContent = t('errInput');
+    return;
+  }
+  els.errMsg.textContent = '';
+  settings.workMin = w; settings.restMin = r;
+  saveJSON(LS_KEY.settings, settings);
+  startWork(w);
+});
+
+function onSettingChange(){
+  var w = parseFloat(els.workMin.value), r = parseFloat(els.restMin.value);
+  if(isFinite(w) && w > 0){ settings.workMin = w; }
+  if(isFinite(r) && r > 0){ settings.restMin = r; }
+  saveJSON(LS_KEY.settings, settings);
+  if(phase === 'idle'){ updateDisplay(settings.workMin * 60000); }  // 空闲时实时预览
+}
+els.workMin.addEventListener('input', onSettingChange);
+els.restMin.addEventListener('input', onSettingChange);
+
+/* 快捷预设：一键填入两组时长 */
+Array.prototype.forEach.call(document.querySelectorAll('.preset'), function(btn){
+  btn.addEventListener('click', function(){
+    els.workMin.value = btn.dataset.work;
+    els.restMin.value = btn.dataset.rest;
+    onSettingChange();
+    els.errMsg.textContent = '';
+  });
+});
+
+/* ================= 自定义预设（4 个，存 localStorage，可自编辑） ================= */
+var CUSTOM_KEY = 'wb_eye_custom_presets_v1';
+function loadCustom(){ return loadJSON(CUSTOM_KEY, [null, null, null, null]); }
+function saveCustom(list){ saveJSON(CUSTOM_KEY, list); }
+var customList = loadCustom();   // 每个元素：{name, work, rest} 或 null（空槽）
+var editingIdx = -1;             // 当前正在编辑的槽位索引，-1 表示无
+
+/* 简单的 HTML 转义，防止名称中的特殊字符破坏布局 */
+function escHtml(s){
+  return String(s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+/* 自定义时长显示：休息 <1 分钟时按秒展示（如 20秒） */
+function fmtCustomTime(p){
+  var w = Math.round(p.work * 10) / 10;
+  var restTxt = p.rest < 1 ? Math.round(p.rest * 60) + '秒' : Math.round(p.rest * 10) / 10 + '分钟';
+  return w + '分钟 / ' + restTxt;
+}
+
+/* 点击已保存的自定义预设：一键填入 */
+function applyCustom(i){
+  var p = customList[i];
+  if(!p) return;
+  els.workMin.value = p.work;
+  els.restMin.value = p.rest;
+  onSettingChange();
+  els.errMsg.textContent = t('appliedPreset', [p.name]);
+}
+function startEdit(i){ editingIdx = i; renderCustom(); }
+function cancelEdit(){ editingIdx = -1; renderCustom(); }
+
+/* 保存自定义预设：校验时长必须为正数 */
+function saveCustomEdit(i, nameInput, workInput, restInput){
+  var w = parseFloat(workInput.value), r = parseFloat(restInput.value);
+  if(!isFinite(w) || w <= 0 || !isFinite(r) || r <= 0){
+    els.errMsg.textContent = t('errCustom');
+    return;
+  }
+  customList[i] = {
+    name: (nameInput.value.trim() || t('presetN', [i + 1])).slice(0, 8),
+    work: w,
+    rest: r
+  };
+  saveCustom(customList);
+  editingIdx = -1;
+  els.errMsg.textContent = '';
+  renderCustom();
+}
+/* 清空某个自定义预设槽位 */
+function clearCustom(i){
+  customList[i] = null;
+  saveCustom(customList);
+  editingIdx = -1;
+  renderCustom();
+}
+
+/* 渲染 4 个自定义预设槽位（空槽 / 已保存 / 编辑表单 三种形态） */
+function renderCustom(){
+  var box = $('customPresets');
+  box.innerHTML = '';
+  for(var i = 0; i < 4; i++){
+    var p = customList[i];
+
+    /* 编辑形态：名称 + 用眼 + 休息 + 保存/取消/清空 */
+    if(editingIdx === i){
+      var form = document.createElement('div');
+      form.className = 'preset-edit-form';
+      form.innerHTML =
+        '<div class="pf-field pf-name"><label>' + t('name') + '</label><input type="text" maxlength="8" placeholder="' + t('presetN', [i + 1]) + '" value="' + escHtml(p ? p.name : '') + '"></div>' +
+        '<div class="pf-field"><label>' + t('workMinute') + '</label><input type="number" min="0.1" step="any" inputmode="decimal" placeholder="25" value="' + (p ? p.work : '') + '"></div>' +
+        '<div class="pf-field"><label>' + t('restMinute') + '</label><input type="number" min="0.1" step="any" inputmode="decimal" placeholder="5" value="' + (p ? p.rest : '') + '"></div>' +
+        '<div class="pf-actions">' +
+          '<button class="pf-btn" type="button">' + t('save') + '</button>' +
+          '<button class="pf-btn pf-btn-ghost" type="button">' + t('cancel') + '</button>' +
+          (p ? '<button class="pf-btn pf-btn-ghost" type="button">' + t('clear') + '</button>' : '') +
+        '</div>';
+      var inputs = form.querySelectorAll('input');
+      var saveBtn = form.querySelector('.pf-btn');
+      var ghostBtns = form.querySelectorAll('.pf-btn-ghost');
+      var cancelBtn = ghostBtns[0];
+      var clearBtn = p ? ghostBtns[1] : null;
+      saveBtn.addEventListener('click', function(){ saveCustomEdit(i, inputs[0], inputs[1], inputs[2]); });
+      cancelBtn.addEventListener('click', cancelEdit);
+      if(clearBtn){ clearBtn.addEventListener('click', function(){ clearCustom(i); }); }
+      box.appendChild(form);
+      continue;
+    }
+
+    /* 槽位形态 */
+    var slot = document.createElement('div');
+    slot.className = 'preset-slot';
+    if(p){
+      slot.innerHTML =
+        '<button class="preset" type="button" title="点击应用">' +
+          '<span class="preset-name">' + escHtml(p.name) + '</span>' +
+          '<span class="preset-time">' + escHtml(fmtCustomTime(p)) + '</span>' +
+        '</button>' +
+        '<button class="preset-edit" type="button" title="编辑此预设">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>' +
+        '</button>';
+      slot.querySelector('.preset').addEventListener('click', (function(idx){ return function(){ applyCustom(idx); }; })(i));
+      slot.querySelector('.preset-edit').addEventListener('click', (function(idx){ return function(){ startEdit(idx); }; })(i));
+    } else {
+      /* 空槽：点击进入设置 */
+      slot.innerHTML =
+        '<button class="preset preset-empty" type="button">' +
+          '<span class="preset-name">+ ' + t('presetN', [i + 1]) + '</span>' +
+          '<span class="preset-time">' + t('clickSet') + '</span>' +
+        '</button>';
+      slot.querySelector('.preset').addEventListener('click', (function(idx){ return function(){ startEdit(idx); }; })(i));
+    }
+    box.appendChild(slot);
+  }
+}
+
+els.pauseBtn.addEventListener('click', togglePause);
+els.skipBtn.addEventListener('click', skipPhase);
+els.resetBtn.addEventListener('click', function(){
+  if(confirm(t('resetConfirm'))){ resetTimer(); }
+});
+els.skipRestBtn.addEventListener('click', skipRest);
+
+/* 切回页面时立即用时间戳校正；休息期间切走再回来，剩余时间按真实流逝计算，不会变短 */
+document.addEventListener('visibilitychange', function(){
+  if(document.hidden) return;
+  if(phase === 'work' || phase === 'rest'){
+    if(!pausedFlag){
+      remainMs = endAt - Date.now();
+      if(remainMs <= 0){ phaseComplete(); return; }
+    }
+    updateDisplay(remainMs);
+    if(phase === 'rest'){ updateRestUI(remainMs); }
+  }
+});
+
+/* ================= 导出 / 导入备份 ================= */
+function timerSnapshot(){
+  if(phase === 'idle') return null;
+  return {phase:phase, paused:pausedFlag, endAt:endAt, remainMs:remainMs, totalMs:totalMs};
+}
+
+els.exportBtn.addEventListener('click', function(){
+  var data = {
+    app:'用眼时长提示器', version:1,
+    exportedAt:new Date().toISOString(),
+    settings:settings,
+    timer:timerSnapshot()
+  };
+  var blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '用眼时长提示器-备份-' + todayStr() + '.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 200);
+});
+
+els.importBtn.addEventListener('click', function(){ els.importFile.click(); });
+els.importFile.addEventListener('change', function(){
+  var f = this.files && this.files[0];
+  this.value = '';
+  if(!f) return;
+  var reader = new FileReader();
+  reader.onload = function(){
+    clearTick();
+    try{
+      var data = JSON.parse(reader.result);
+      if(!data || typeof data !== 'object'){ throw new Error('bad'); }
+
+      /* 恢复设置 */
+      if(data.settings && isFinite(+data.settings.workMin) && +data.settings.workMin > 0){
+        settings.workMin = +data.settings.workMin;
+        els.workMin.value = settings.workMin;
+      }
+      if(data.settings && isFinite(+data.settings.restMin) && +data.settings.restMin > 0){
+        settings.restMin = +data.settings.restMin;
+        els.restMin.value = settings.restMin;
+      }
+      saveJSON(LS_KEY.settings, settings);
+
+      /* 恢复计时状态 */
+      var t = data.timer;
+      if(t && (t.phase === 'work' || t.phase === 'rest') && isFinite(+t.totalMs) && +t.totalMs > 0){
+        phase = t.phase;
+        pausedFlag = !!t.paused;
+        totalMs = +t.totalMs;
+        if(pausedFlag){
+          endAt = 0;
+          remainMs = Math.max(0, +t.remainMs || 0);
+        } else if(isFinite(+t.endAt) && +t.endAt > 0){
+          endAt = +t.endAt;
+          remainMs = Math.max(0, endAt - Date.now());   // 以时间戳续跑
+        } else {
+          phase = 'idle'; pausedFlag = false; totalMs = 0; remainMs = 0;
+        }
+        if(phase !== 'idle'){
+          beep10Done = false; beep30Done = false; lastTitleSec = -1;
+          saveTimer();
+          renderPhaseUI();
+          if(remainMs <= 0){
+            phaseComplete();            // 导入时阶段已结束 → 直接走完成流程
+          } else {
+            updateDisplay(remainMs);
+            if(phase === 'rest'){ showRestPopup(); updateRestUI(remainMs); }
+            startTick();
+          }
+        } else {
+          resetTimer();
+        }
+      } else {
+        resetTimer();
+      }
+      els.errMsg.textContent = t('importOk');
+    }catch(e){
+      els.errMsg.textContent = t('importFail');
+      /* 导入失败回退到空闲态，避免状态错乱 */
+      resetTimer();
+    }
+  };
+  reader.readAsText(f);
+});
+
+/* ================= 多标签页防重复计时（单实例接管） =================
+   同一浏览器开多个标签页时，只有「主控」页运行计时引擎；
+   其余页面自动降级为只读提示，主控页关闭后由其他页自动接管。 */
+var OWNER_KEY = 'wb_eye_owner_v1';
+var myId = 'pg' + Math.random().toString(36).slice(2, 10);
+var isSlave = false;
+var heartbeatTimer = null;
+var ownerWatchTimer = null;
+function ownerFresh(owner){
+  return !!(owner && owner.id && owner.ts && (Date.now() - owner.ts < 3000));
+}
+function startHeartbeat(){
+  stopHeartbeat();
+  heartbeatTimer = setInterval(function(){
+    try{ localStorage.setItem(OWNER_KEY, JSON.stringify({id:myId, ts:Date.now()})); }catch(e){}
+  }, 1200);
+}
+function stopHeartbeat(){
+  if(heartbeatTimer){ clearInterval(heartbeatTimer); heartbeatTimer = null; }
+}
+function becomeOwner(){
+  isSlave = false;
+  var bar = document.getElementById('slaveBar');
+  if(bar){ bar.classList.remove('show'); }
+  startHeartbeat();
+  renderPhaseUI();
+}
+function becomeSlave(){
+  isSlave = true;
+  clearTick();                                  // 停止本页计时引擎，避免多页同时跑
+  stopWinWatch();
+  stopCam();                                    // 从属页关闭摄像头，检测交给主控页
+  els.restPopup.classList.remove('show');       // 隐藏本页弹窗（不动 localStorage，休息状态归主控页管）
+  stopHeartbeat();
+  var bar = document.getElementById('slaveBar');
+  if(bar){
+    document.getElementById('slaveText').textContent = t('slaveText');
+    bar.classList.add('show');
+  }
+  /* 从属页禁止操作计时 */
+  els.startBtn.disabled = true;
+  els.pauseBtn.disabled = true;
+  els.skipBtn.disabled = true;
+  els.resetBtn.disabled = true;
+}
+function claimOwnership(){
+  var owner = loadJSON(OWNER_KEY, null);
+  if(ownerFresh(owner) && owner.id !== myId){
+    becomeSlave();
+  } else {
+    becomeOwner();
+  }
+}
+function startOwnerWatch(){
+  stopOwnerWatch();
+  ownerWatchTimer = setInterval(function(){
+    var owner = loadJSON(OWNER_KEY, null);
+    if(isSlave){
+      /* 主控页心跳消失 → 本页接管 */
+      if(!ownerFresh(owner) || (owner && owner.id === myId)){
+        becomeOwner();
+        initTimerRestore();
+      }
+    } else if(!ownerFresh(owner) || (owner && owner.id !== myId)){
+      /* 另一个页面刚接管 → 本页让位 */
+      becomeSlave();
+    }
+  }, 2500);
+}
+function stopOwnerWatch(){
+  if(ownerWatchTimer){ clearInterval(ownerWatchTimer); ownerWatchTimer = null; }
+}
+window.addEventListener('storage', function(e){
+  if(e.key === OWNER_KEY){
+    claimOwnership();
+    if(!isSlave){ initTimerRestore(); }
+  }
+});
+window.addEventListener('beforeunload', function(){
+  stopHeartbeat();
+  try{ localStorage.removeItem(OWNER_KEY); }catch(e){}
+});
+
+/* ================= 距离过近检测（摄像头，默认关，纯本地） =================
+   灵敏度依据眼科/疾控规范（北京市疾控中心、湖北省卫健委、人民网健康等）：
+   - 电脑屏最佳观看距离 50–70cm（约一臂远），低于 40cm 即属“过近”；
+   - 触发距离按设备分两套配置：笔记本默认 40cm、台式机默认 60cm
+     （笔记本屏幕近、台式机可按 50–70cm 规范坐远），各自独立保存，
+     用滑块在 30–100cm（人眼-屏幕常见范围）内自定义；
+   - 距离 → 肤色占比阈值 用经验公式 ratio = 220 / d² 近似换算（已按实际摄像头
+     画面占比修正，较旧版 320/d² 更灵敏）；
+   - 阈值下限 0.08：防止滑块拉到 100cm 时阈值过低、把暖色背景误判成肤色而误报；
+   - 检测频率 1s/次、检测区放大到 96×72；连续 2 次过近触发（约 2s），
+     非常近（>1.5 倍阈值）时立即触发；
+   - 助手窗口“只在提醒时出现”：过近才弹窗，恢复正常后延迟 3s 自动关闭。 */
+var camOn = loadJSON('wb_eye_cam_v1', false);
+var device = loadJSON('wb_eye_device_v1', 'laptop');    // 设备类型：laptop | desktop
+var LAPTOP_DIST_KEY = 'wb_eye_cam_dist_laptop_v1';
+var DESKTOP_DIST_KEY = 'wb_eye_cam_dist_desktop_v1';
+function loadDeviceDist(dev){
+  var key = (dev === 'desktop') ? DESKTOP_DIST_KEY : LAPTOP_DIST_KEY;
+  var def = (dev === 'desktop') ? 60 : 40;
+  var v = loadJSON(key, null);
+  if(v != null && isFinite(+v) && +v > 0){ return +v; }
+  var old = loadJSON('wb_eye_cam_dist_v1', null);      // 兼容旧版单距离配置
+  return (old != null && isFinite(+old) && +old > 0) ? +old : def;
+}
+function saveDeviceDist(d){
+  saveJSON((device === 'desktop') ? DESKTOP_DIST_KEY : LAPTOP_DIST_KEY, d);
+}
+var camDist = loadDeviceDist(device);    // 当前设备的触发距离（cm），30–100
+var camStream = null, camTimer = null;
+var camNearCount = 0;              // 连续过近次数（去抖）
+var camDbgRatio = 0;               // 最近一次检测的肤色占比（供调试读数）
+function skinRatioFor(d){          // 距离 → 肤色占比阈值（经验标定，220/d²）
+  return Math.min(0.35, Math.max(0.08, 220 / (d * d)));
+}
+var SKIN_RATIO_NEAR = skinRatioFor(camDist);
+var camVideo = document.createElement('video');
+camVideo.autoplay = true;
+camVideo.playsInline = true;
+camVideo.muted = true;
+camVideo.style.display = 'none';
+document.body.appendChild(camVideo);
+var camCanvas = document.createElement('canvas');
+
+/* 助手窗口当前检测结果（供写入 wb_eye_helper_state_v1） */
+var helperNearFlag = false, helperRatio = 0, helperBlinkTs = 0;
+
+function pushHelperState(){
+  if(phase !== 'work' || !(camOn || blinkOn)){
+    try{ localStorage.removeItem(HELPER_STATE_KEY); }catch(e){}
+    return;
+  }
+  saveJSON(HELPER_STATE_KEY, {near: helperNearFlag, ratio: helperRatio, blinkTs: helperBlinkTs, ts: Date.now()});
+}
+function helperWinOpen(){ return !!(openedHelperWin && !openedHelperWin.closed); }
+
+function camCheck(){
+  if(phase !== 'work'){
+    hideNotice(); camNearCount = 0; helperNearFlag = false; helperRatio = 0;
+    pushHelperState(); helperScheduleClose(300);
+    return;
+  }
+  if(!camCanvas.getContext) return;
+  var ctx = camCanvas.getContext('2d');
+  var w = 96, h = 72;                      // 放大检测区，肤色统计更稳定
+  camCanvas.width = w; camCanvas.height = h;
+  try{ ctx.drawImage(camVideo, 0, 0, w, h); }catch(e){ return; }
+  if(camVideo.readyState < 2) return;      // 画面未就绪不判
+  var data = ctx.getImageData(0, 0, w, h).data;
+  var skin = 0;
+  for(var i = 0; i < data.length; i += 4){
+    var r = data[i], g = data[i + 1], b = data[i + 2];
+    if(r > 95 && g > 40 && b > 20 && r > g && r > b && (r - Math.min(g, b)) > 15){ skin++; }
+  }
+  var ratio = skin / (w * h);
+  camDbgRatio = ratio;                       // 记录读数，供调试行显示
+  helperRatio = Math.min(1, ratio / SKIN_RATIO_NEAR);   // 归一化：1 = 恰好触发
+  var near = ratio > SKIN_RATIO_NEAR;
+  if(near){
+    camNearCount += 1;
+    /* 非常近（>1.5 倍阈值）立即触发，否则连续 2 次（约 2s）后触发 */
+    var instant = ratio > SKIN_RATIO_NEAR * 1.5;
+    if(camNearCount >= 2 || instant){
+      helperNearFlag = true;
+      if(helperDismissTimer){ clearTimeout(helperDismissTimer); helperDismissTimer = null; }
+      ensureHelperWin();                     // 过近 → 弹出护眼助手提醒
+      if(!helperWinOpen()){ showNotice(t('camNear'), true); }   // 窗口被拦时页面横幅兜底
+    }
+  } else {
+    camNearCount = 0;
+    if(helperNearFlag){
+      helperNearFlag = false;
+      hideNotice();
+      helperScheduleClose(3000);             // 恢复正常 → 3s 后自动关助手窗口
+    }
+  }
+  pushHelperState();
+  updateCamDbg();
+}
+function startCam(){
+  if(camTimer){ return; }            // 已在检测，避免重复开启
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    showNotice(t('camError'), true);
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}}).then(function(stream){
+    camStream = stream;
+    camVideo.srcObject = stream;
+    camVideo.play().catch(function(){});
+    camTimer = setInterval(camCheck, 1000);       // 每 1s 检测一次
+    updateCamState();
+    hideNotice();
+  }).catch(function(){
+    showNotice(t('camError'), true);
+  });
+}
+/* 距离提醒开启时：开始计时 / 继续计时 自动开启摄像头（无需手动点开关） */
+function ensureCamActive(){
+  if(!camOn) return;
+  if(camTimer || camStream){ return; }   // 已在运行则不重复开启
+  startCam();
+}
+function stopCam(){
+  if(camTimer){ clearInterval(camTimer); camTimer = null; }
+  if(camStream){ camStream.getTracks().forEach(function(t){ t.stop(); }); camStream = null; }
+  camVideo.srcObject = null;
+  updateCamState();
+  hideNotice();
+}
+function toggleCam(){
+  if(camOn){ camOn = false; stopCam(); }
+  else { camOn = true; startCam(); }
+  saveJSON('wb_eye_cam_v1', camOn);
+  updateCamState();
+  if(!camOn){ hideHelperWin(); }        // 关闭距离提醒时收掉助手窗口
+}
+function updateCamState(){
+  var el = document.getElementById('camState');
+  if(el){ el.textContent = camOn ? t('camOn') : t('camOff'); }
+  document.getElementById('advCamBtn').classList.toggle('on', camOn);
+  /* 开启距离提醒时显示触发距离滑块、说明与调试读数 */
+  var wrap = document.getElementById('distWrap');
+  if(wrap){ wrap.hidden = !camOn; }
+  var hint = document.getElementById('distHint');
+  if(hint){ hint.hidden = !camOn; }
+  updateCamDbg();
+  updateDistLock();
+}
+
+/* 触发距离：分笔记本/台式机两套配置（30–100cm，各自独立保存）。
+   计时进行中（work 未暂停）锁定设备切换与滑块，仅暂停或未开始时可调。 */
+function updateDistLock(){
+  var locked = (phase === 'work' && !pausedFlag) || phase === 'rest';
+  var range = document.getElementById('distRange');
+  if(range){ range.disabled = locked; }
+  var lb = document.getElementById('devLaptopBtn');
+  var dt = document.getElementById('devDesktopBtn');
+  if(lb){ lb.disabled = locked; }
+  if(dt){ dt.disabled = locked; }
+  var hint = document.getElementById('distHint');
+  if(hint){ hint.textContent = locked ? t('distLocked') : t('distHint'); }
+}
+function updateDeviceChips(){
+  var lb = document.getElementById('devLaptopBtn');
+  var dt = document.getElementById('devDesktopBtn');
+  if(lb){ lb.classList.toggle('on', device === 'laptop'); }
+  if(dt){ dt.classList.toggle('on', device === 'desktop'); }
+}
+function setDevice(dev){
+  if(dev === device) return;
+  device = dev;
+  saveJSON('wb_eye_device_v1', device);
+  camDist = loadDeviceDist(device);        // 载入该设备的触发距离
+  SKIN_RATIO_NEAR = skinRatioFor(camDist);
+  var range = document.getElementById('distRange');
+  var val = document.getElementById('distVal');
+  if(range){ range.value = camDist; }
+  if(val){ val.textContent = camDist + 'cm'; }
+  updateDeviceChips();
+  updateCamDbg();
+}
+/* 实时调试读数：显示当前肤色占比与阈值，方便对照滑块校准 */
+function updateCamDbg(){
+  var dbg = document.getElementById('camDbg');
+  if(!dbg) return;
+  if(camOn){
+    dbg.hidden = false;
+    dbg.textContent = t('camDbg', [
+      camDbgRatio.toFixed(3),
+      SKIN_RATIO_NEAR.toFixed(3),
+      camDist
+    ]);
+  } else {
+    dbg.hidden = true;
+  }
+}
+function bindDistSlider(){
+  var range = document.getElementById('distRange');
+  var val = document.getElementById('distVal');
+  if(!range || !val) return;
+  range.value = camDist;
+  val.textContent = camDist + 'cm';
+  range.addEventListener('input', function(){
+    if(phase === 'work' && !pausedFlag){
+      range.value = camDist;                      // 计时中不允许改：回滚
+      showNotice(t('distLocked'), false);
+      hideNoticeSoon(3000);
+      return;
+    }
+    camDist = parseInt(range.value, 10) || 40;
+    saveDeviceDist(camDist);                     // 存到当前设备
+    SKIN_RATIO_NEAR = skinRatioFor(camDist);
+    val.textContent = camDist + 'cm';
+    updateCamDbg();
+  });
+  var lb = document.getElementById('devLaptopBtn');
+  var dt = document.getElementById('devDesktopBtn');
+  if(lb){ lb.addEventListener('click', function(){ setDevice('laptop'); }); }
+  if(dt){ dt.addEventListener('click', function(){ setDevice('desktop'); }); }
+  updateDeviceChips();
+  updateDistLock();
+  updateCamDbg();
+}
+
+/* ================= 高级设置按钮（语言 / 主题 / 距离 / 眨眼） ================= */
+function bindAdvControls(){
+  document.getElementById('langBtn').addEventListener('click', function(){
+    lang = (lang === 'zh') ? 'en' : 'zh';
+    saveJSON('wb_eye_lang_v1', lang);
+    applyLang();
+  });
+  document.getElementById('themeBtn').addEventListener('click', cycleTheme);
+  document.getElementById('advCamBtn').addEventListener('click', toggleCam);
+  document.getElementById('advBlinkBtn').addEventListener('click', function(){
+    toggleBlink();
+    if(!blinkOn){ hideHelperWin(); }      // 关闭眨眼提醒时收掉助手窗口
+  });
+  bindDistSlider();
+  updateCamState();
+  updateBlinkState();
+}
+
+/* ================= 桌面键盘快捷键（主要使用场景为电脑端） =================
+   空格=开始/暂停   S=跳过本阶段   R=重置   L=切换语言   T=切换主题 */
+function bindKeyboardShortcuts(){
+  window.addEventListener('keydown', function(e){
+    if(isSlave) return;
+    var tag = e.target && e.target.tagName;
+    if(tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return;
+    if(e.repeat) return;
+    if(e.code === 'Space' || e.key === ' '){
+      e.preventDefault();                                   // 防止空格滚动页面
+      if(phase === 'idle'){ els.startBtn.click(); }
+      else if(phase === 'work'){ togglePause(); }
+      return;
+    }
+    var k = (e.key || '').toLowerCase();
+    if(k === 's'){ if(phase === 'work'){ skipPhase(); } return; }
+    if(k === 'r'){ if(phase !== 'idle'){ els.resetBtn.click(); } return; }
+    if(k === 'l'){ document.getElementById('langBtn').click(); return; }
+    if(k === 't'){ document.getElementById('themeBtn').click(); return; }
+  });
+}
+
+/* ================= 初始化 ================= */
+function init(){
+  applyTheme();
+  applyLang();
+  claimOwnership();       // 多标签页单实例接管
+  els.workMin.value = settings.workMin;
+  els.restMin.value = settings.restMin;
+  renderCustom();         // 渲染用户自定义预设（存本机）
+  bindAdvControls();
+  bindKeyboardShortcuts();
+  startOwnerWatch();
+  initTimerRestore();
+}
+
+/* 刷新后从上次时间戳继续（剩余时间 = 阶段结束时间 - 当前时间）；
+   从属页不运行计时引擎，避免多个标签页同时跑导致重复提醒。 */
+function initTimerRestore(){
+  if(isSlave) return;
+  var t = loadJSON(LS_KEY.timer, null);
+  if(t && (t.phase === 'work' || t.phase === 'rest') && isFinite(+t.totalMs) && +t.totalMs > 0){
+    phase = t.phase;
+    pausedFlag = !!t.paused;
+    totalMs = +t.totalMs;
+    if(pausedFlag){
+      endAt = 0;
+      remainMs = Math.max(0, +t.remainMs || 0);
+    } else {
+      endAt = +t.endAt || 0;
+      remainMs = Math.max(0, endAt - Date.now());
+    }
+    beep10Done = false; beep30Done = false; lastTitleSec = -1;
+    renderPhaseUI();
+    if(remainMs <= 0){
+      phaseComplete();   // 离开期间阶段已走完 → 正常进入下一阶段
+    } else {
+      updateDisplay(remainMs);
+      if(phase === 'rest'){ showRestPopup(); updateRestUI(remainMs); }
+      if(phase === 'work'){ ensureCamActive(); }   // 刷新续跑用眼阶段：自动恢复摄像头
+      startTick();
+    }
+  } else {
+    resetTimer();
+  }
+}
+
+init();
+})();
+</script>
+</body>
+</html>
