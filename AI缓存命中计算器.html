@@ -1213,7 +1213,7 @@ user：
 
   <!-- Footer -->
   <div class="footer">
-    <div>DeepSeek 官方 8/17 起将涨价并采用峰谷定价；当前（8/17 前）仍按官方现行价计算</div>
+    <div>DeepSeek 8/17 起采用峰谷定价（高峰 9:00-12:00 / 14:00-18:00），本工具默认按高峰价，可在 DeepSeek 平台切换空闲半价</div>
     <div>价格可能随时变动，仅供参考，以官方最新公告为准</div>
     <div style="margin-top:8px">费用计算器 · Token 可视化 · 缓存友好度检测，一站式工具箱</div>
   </div>
@@ -1260,13 +1260,14 @@ const PLATFORMS = [
     { name: 'Grok 3',       in: 3.00, out: 15.00, cache: 0.75 },
   ]},
   { id: 'deepseek', name: 'DeepSeek', currency: 'CNY', models: [
-    { name: 'DeepSeek-V4-Pro',     in: 3.00,  out: 6.00,  cache: 0.025 },
-    { name: 'DeepSeek-V4-Flash',   in: 1.00,  out: 2.00,  cache: 0.02 },
+    { name: 'DeepSeek-V4-Pro',     in: 9.00,  out: 27.00, cache: 0.30 },
+    { name: 'DeepSeek-V4-Flash',   in: 3.00,  out: 9.00,  cache: 0.10 },
     { name: 'DeepSeek-V3',         in: 2.00,  out: 8.00,  cache: 0.50 },
     { name: 'DeepSeek-V3-0324',    in: 2.00,  out: 8.00,  cache: 0.50 },
     { name: 'DeepSeek-R1',         in: 4.00,  out: 16.00, cache: 1.00 },
     { name: 'DeepSeek-R1-0528',    in: 4.00,  out: 16.00, cache: 1.00 },
   ]},
+
   { id: 'qwen', name: '通义千问', currency: 'CNY', models: [
     { name: 'Qwen3-Max',     in: 3.00,  out: 12.00, cache: null },
     { name: 'Qwen3-Plus',    in: 0.80,  out: 2.00,  cache: null },
@@ -1324,6 +1325,12 @@ const PLATFORMS = [
     { name: '手动输入',  in: 0, out: 0, cache: null, note: 'manual' },
   ]},
 ];
+/* DeepSeek 8/17 起峰谷定价：仅 V4 系列分高峰/空闲（空闲为高峰一半） */
+const DEEPSEEK_OFFPEAK = {
+  'DeepSeek-V4-Pro':   { in: 4.50, out: 13.50, cache: 0.15 },
+  'DeepSeek-V4-Flash': { in: 1.50, out: 4.50,  cache: 0.05 },
+};
+
 
 /* ============================================================
    模型价格实时联网同步（国际 + 国产）
@@ -1535,6 +1542,14 @@ async function refreshPrices() {
         m.cache = PLATFORMS_BUILTIN[i].models[j].cache;
       });
     });
+    // 重放 DeepSeek 时段选择（重置会恢复高峰价，若用户选过空闲需重新应用）
+    if (getDeepSeekBand() === 'offpeak') {
+      const ds = PLATFORMS.find(p => p.id === 'deepseek');
+      if (ds) ds.models.forEach(m => {
+        const off = DEEPSEEK_OFFPEAK[m.name];
+        if (off) { m.in = off.in; m.out = off.out; m.cache = off.cache; }
+      });
+    }
     let count = 0;
     const srcNames = [];
     apiSources.forEach(src => {
@@ -1608,7 +1623,7 @@ const I18N = {
   '本地规则引擎 · 无需联网 · 自动分离 system/user 结构': 'Local rule engine · offline · splits system/user automatically',
   '左右两栏独立检测 · 中文按 1.5 token/字 估算': 'Both sides checked independently · CJK ≈ 1.5 tokens/char',
   '中文按 1.5 token/字 · 英文按 1.3 token/词 估算': 'CJK ≈ 1.5 tokens/char · EN ≈ 1.3 tokens/word (approx)',
-  'DeepSeek 官方 8/17 起将涨价并采用峰谷定价；当前（8/17 前）仍按官方现行价计算': 'DeepSeek will raise prices with peak/off-peak pricing from Aug 17; current prices are the official pre-Aug-17 rates',
+  'DeepSeek 8/17 起采用峰谷定价（高峰 9:00-12:00 / 14:00-18:00），本工具默认按高峰价，可在 DeepSeek 平台切换空闲半价': 'DeepSeek uses peak/off-peak pricing since Aug 17 (peak: 9-12 & 14-18 CST); calculator defaults to peak prices, switchable to off-peak (half) on the DeepSeek tab',
   '价格可能随时变动，仅供参考，以官方最新公告为准': 'Prices may change anytime; refer to official announcements',
   '费用计算器 · Token 可视化 · 缓存友好度检测，一站式工具箱': 'All-in-one toolbox: cost calculator · token visualization · prompt check',
   '选模型、填用量，一眼看清缓存帮你省了多少钱': 'Pick a model, enter usage, see how much caching saves you',
@@ -1765,6 +1780,29 @@ function deleteCustomModel(index) {
   renderModels();
 }
 
+/* DeepSeek 峰谷时段切换（8/17 起官方高峰/空闲定价，仅 V4 系列区分） */
+function getDeepSeekBand() {
+  try { return localStorage.getItem('aiCacheBand') || 'peak'; } catch (e) { return 'peak'; }
+}
+function setDeepSeekBand(band) {
+  try { localStorage.setItem('aiCacheBand', band); } catch (e) {}
+  const ds = PLATFORMS.find(p => p.id === 'deepseek');
+  if (!ds) return;
+  ds.models.forEach(m => {
+    const off = DEEPSEEK_OFFPEAK[m.name];
+    if (!off) return;
+    if (band === 'offpeak') {
+      m.in = off.in; m.out = off.out; m.cache = off.cache;
+    } else {
+      const builtin = PLATFORMS_BUILTIN.find(p => p.id === 'deepseek');
+      const bm = builtin && builtin.models.find(x => x.name === m.name);
+      if (bm) { m.in = bm.in; m.out = bm.out; m.cache = bm.cache; }
+    }
+  });
+  renderModels();
+  if (curModel && curPlatform && curPlatform.id === 'deepseek') selectModel();
+}
+
 function renderTabs() {
   const w = document.getElementById('platformTabs');
   w.innerHTML = '';
@@ -1783,6 +1821,27 @@ function renderModels() {
   w.innerHTML = '';
   const favs = loadFavs();
   const isCustomPlatform = curPlatform.id === 'custom';
+
+  // DeepSeek 平台：峰谷时段切换（高峰/空闲）
+  if (curPlatform.id === 'deepseek') {
+    const band = getDeepSeekBand();
+    const toolbar = document.createElement('div');
+    toolbar.className = 'mode-toggle';
+    toolbar.style.marginBottom = '10px';
+    const bPeak = document.createElement('button');
+    bPeak.type = 'button';
+    bPeak.className = 'mode-btn' + (band === 'peak' ? ' active' : '');
+    bPeak.textContent = '高峰时段';
+    bPeak.onclick = () => setDeepSeekBand('peak');
+    const bOff = document.createElement('button');
+    bOff.type = 'button';
+    bOff.className = 'mode-btn' + (band === 'offpeak' ? ' active' : '');
+    bOff.textContent = '空闲时段（半价）';
+    bOff.onclick = () => setDeepSeekBand('offpeak');
+    toolbar.appendChild(bPeak);
+    toolbar.appendChild(bOff);
+    w.appendChild(toolbar);
+  }
 
   // 自定义平台：先渲染已保存的自定义模型
   if (isCustomPlatform) {
