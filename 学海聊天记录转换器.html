@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="M59OsC5sIGgF5kTLf7Bmer">
+<head data-page-node-id="TFgwS96EGlDBpo0OTFHUdC">
+<meta charset="UTF-8" data-page-node-id="1T5XlWutdSVQcEpRthJumo">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" data-page-node-id="EocBGLDCfkwIWOyfWEegK4">
+<meta name="format-detection" content="telephone=no" data-page-node-id="6QTzehazcgJ8dQBPdxiBtc">
+<title>聊天记录转换器</title>
+<style id="viewer-style">
+  :root{
+    --bg:#EDEDED; --panel:#FFFFFF; --green:#95EC69;
+    --ink:#111111; --sub:#999999; --line:#E5E5E5;
+    --brand:#07C160; --time:#B2B2B2;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:#181818; color:var(--ink);
+  }
+
+  /* ===== 拖拽区 ===== */
+  #dropzone{
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:#181818; padding:24px; z-index:10;
+  }
+  #dropzone .dz-box{
+    width:100%; max-width:480px; border:2px dashed #555; border-radius:16px;
+    padding:64px 24px; text-align:center; cursor:pointer; transition:.2s;
+    background:#222; color:#fff;
+  }
+  #dropzone .dz-box.drag{border-color:#07C160; background:#1c2a22;}
+  #dropzone .dz-title{font-size:20px; font-weight:600; color:#fff; margin-bottom:10px;}
+  #dropzone .dz-hint{font-size:14px; color:#aaa; line-height:1.7;}
+  #dropzone .dz-sub{font-size:12px; color:#666; margin-top:16px; line-height:1.6;}
+  #dropzone input{display:none;}
+
+  /* ===== 转换器配置条 ===== */
+  #convbar{
+    display:none; max-width:480px; margin:0 auto; padding:10px 12px;
+    display:flex; align-items:center; gap:8px;
+  }
+  #convbar input{
+    flex:1; min-width:0; height:36px; padding:0 10px; border:1px solid #444;
+    border-radius:8px; background:#222; color:#fff; font-size:14px; outline:none;
+  }
+  #convbar input:focus{border-color:var(--brand);}
+  #convbar .btn{
+    flex:none; height:36px; padding:0 14px; border-radius:8px; font-size:13px; cursor:pointer;
+    background:#333; color:#fff; border:none;
+  }
+  #convbar .btn.primary{background:var(--brand); color:#fff; font-weight:500;}
+  #convbar .info{flex:none; font-size:12px; color:#888;}
+
+  /* ===== 微信查看器（复刻微信聊天界面） ===== */
+  .stage{display:flex; justify-content:center; align-items:stretch; min-height:100vh;}
+  .phone{
+    position:relative; width:100%; max-width:480px; background:var(--bg);
+    display:flex; flex-direction:column; height:100vh; height:100dvh;
+    box-shadow:0 0 0 1px rgba(0,0,0,.15), 0 8px 40px rgba(0,0,0,.35);
+  }
+  @media (min-width:520px){
+    .phone{height:92vh; margin:4vh auto; border-radius:18px; overflow:hidden;}
+  }
+  .topbar{
+    flex:none; display:flex; align-items:center; gap:4px;
+    height:52px; padding:0 6px; background:#EDEDED; border-bottom:1px solid var(--line);
+  }
+  .topbar .ic{
+    width:38px; height:38px; border:none; background:transparent; color:#181818;
+    font-size:22px; line-height:1; cursor:pointer; display:flex; align-items:center;
+    justify-content:center; border-radius:8px;
+  }
+  .topbar .ic:active{background:#E0E0E0;}
+  .topbar .title{flex:1; text-align:center; font-size:17px; font-weight:600; color:#181818;}
+  .topbar .title small{font-weight:400; color:#888; font-size:13px; margin-left:2px;}
+
+  .toolbar{
+    flex:none; display:flex; align-items:center; gap:8px; padding:8px 10px;
+    background:#F7F7F7; border-bottom:1px solid var(--line);
+  }
+  .toolbar input{
+    flex:1; min-width:0; height:34px; padding:0 10px; border:1px solid #DCDCDC;
+    border-radius:8px; font-size:14px; background:#fff; outline:none;
+  }
+  .toolbar input:focus{border-color:var(--brand);}
+  .toolbar select{
+    height:34px; max-width:96px; border:1px solid #DCDCDC; border-radius:8px;
+    background:#fff; font-size:13px; color:#333; outline:none; padding:0 4px;
+  }
+  .toolbar .btn{
+    flex:none; height:34px; padding:0 12px; border:1px solid #DCDCDC; border-radius:8px;
+    background:#fff; color:#333; font-size:13px; cursor:pointer;
+  }
+  .toolbar .btn:active{background:#EFEFEF;}
+  .toolbar .btn.primary{background:var(--brand); border-color:var(--brand); color:#fff; font-weight:500;}
+
+  .chat{flex:1; overflow-y:auto; padding:14px 12px 20px; -webkit-overflow-scrolling:touch;}
+
+  .dayline{text-align:center; margin:10px 0 12px;}
+  .dayline span{display:inline-block; padding:3px 10px; background:#D7D7D7; color:#fff; font-size:12px; border-radius:4px;}
+  .timeline{text-align:center; margin:8px 0;}
+  .timeline span{font-size:11px; color:var(--time);}
+
+  .msg{
+    display:flex; margin:8px 0; align-items:flex-start; user-select:none;
+    content-visibility:auto; contain-intrinsic-size:auto 90px;
+  }
+  .msg .avatar{
+    flex:none; width:40px; height:40px; border-radius:6px; color:#fff; font-size:17px;
+    font-weight:500; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 1px 2px rgba(0,0,0,.12);
+  }
+  .msg .body{max-width:78%; display:flex; flex-direction:column;}
+  .msg .name{font-size:12px; color:var(--sub); margin:0 0 2px 2px;}
+  .bubble{
+    position:relative; padding:9px 12px; font-size:16px; line-height:1.45;
+    word-break:break-word; white-space:pre-wrap; border-radius:8px;
+    box-shadow:0 1px 1px rgba(0,0,0,.04);
+  }
+  .msg.left .bubble{background:#fff; color:#111; border-top-left-radius:2px;}
+  .msg.right{flex-direction:row-reverse;}
+  .msg.right .bubble{background:var(--green); color:#111; border-top-right-radius:2px;}
+  .msg.right .name{display:none;}
+  .bubble .emoji{font-size:18px; vertical-align:-2px;}
+  .bubble img.img{
+    display:block; max-width:220px; max-height:320px; border-radius:4px;
+    background:#f0f0f0; margin:0; min-width:60px; min-height:40px;
+  }
+  .msg.right .bubble img.img{background:#d6e8c0;}
+
+  .msg .selmark{
+    flex:none; align-self:center; width:20px; height:20px; margin:0 6px;
+    border:1.5px solid #C0C0C0; border-radius:50%; background:#fff;
+    display:none; align-items:center; justify-content:center; color:#fff; font-size:13px;
+  }
+  body.selecting .msg .selmark{display:flex;}
+  .msg.selected .selmark{background:var(--brand); border-color:var(--brand);}
+  .msg.selected .bubble{box-shadow:0 0 0 2px var(--brand);}
+
+  .fab{
+    position:absolute; right:14px; bottom:16px; width:42px; height:42px; border-radius:50%;
+    background:#fff; border:1px solid var(--line); box-shadow:0 3px 10px rgba(0,0,0,.15);
+    color:#555; font-size:20px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; z-index:5;
+  }
+
+  .actionbar{
+    flex:none; display:none; align-items:center; gap:10px; padding:10px 12px;
+    background:#fff; border-top:1px solid var(--line);
+  }
+  body.selecting .actionbar{display:flex;}
+  .actionbar .cnt{font-size:14px; color:#333; flex:1;}
+  .actionbar .btn{height:36px; padding:0 14px; border-radius:8px; font-size:14px; cursor:pointer; border:none;}
+  .actionbar .btn.gray{background:#F0F0F0; color:#333;}
+  .actionbar .btn.green{background:var(--brand); color:#fff; font-weight:500;}
+
+  .modal{
+    position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:50;
+    display:none; align-items:center; justify-content:center; padding:16px;
+  }
+  .modal.show{display:flex;}
+  .modal .sheet{
+    background:#fff; border-radius:14px; width:100%; max-width:520px; max-height:86vh;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .modal .h{flex:none; display:flex; align-items:center; padding:14px 16px; border-bottom:1px solid var(--line);}
+  .modal .h .t{flex:1; font-size:16px; font-weight:600;}
+  .modal .h .x{width:32px; height:32px; border:none; background:#F0F0F0; border-radius:8px; font-size:16px; cursor:pointer;}
+  .modal .grid{flex:1; overflow-y:auto; padding:12px; display:grid; grid-template-columns:repeat(3,1fr); gap:8px;}
+  .modal .grid .g{position:relative; cursor:pointer;}
+  .modal .grid .g img{width:100%; height:auto; border-radius:6px; display:block; background:#f0f0f0;}
+  .modal .foot{flex:none; padding:12px 16px; border-top:1px solid var(--line); font-size:12px; color:#888; line-height:1.5;}
+</style>
+</head>
+<body data-page-node-id="Ev1LgtNf7XMGvyPbHDcnUF">
+
+  <!-- 拖拽区 -->
+  <div id="dropzone" data-page-node-id="yxCvWrqTUHP8CNriwKUuBA">
+    <div class="dz-box" id="dzBox" data-page-node-id="gxhFNn88VUvAw3D4rOQvAR">
+      <div class="dz-title" data-page-node-id="kgiLh778khS0BeMBYDT4rb">拖入聊天记录文件</div>
+      <div class="dz-hint" data-page-node-id="qBytVcqTXqB8g6bEbzOlgW">学海 / 微信 导出的 .html 文件<br data-page-node-id="nXbUnawLxreSquWLCZvquQ">（或点击这里选择文件）</div>
+      <div class="dz-sub" data-page-node-id="GONCxOZkrCnqZQNI7OHnmM">提示：图片会在联网时加载显示；文本消息完全离线可用。</div>
+    </div>
+    <input type="file" id="fileInput" accept=".html,.htm" data-page-node-id="5lV1fACOhprR0IzsFyg0Ys">
+  </div>
+
+  <!-- 转换器配置条 -->
+  <div id="convbar" data-page-node-id="XRlgJRYgwL0Es2zbDiPjQn">
+    <input id="selfName" placeholder="我的昵称（右侧绿气泡，可留空）" data-page-node-id="I4pGfsHWVdOqMGxRF84IZd">
+    <button class="btn" id="btnExportHtml" data-page-node-id="hNW5Y0I3G624dVeMF2xPJ7">导出HTML</button>
+    <button class="btn" id="btnReset" data-page-node-id="iiuwhgcbgIhyUf3xMEJQcK">换文件</button>
+    <span class="info" id="fileInfo" data-page-node-id="cMsJo4yR4RFvwmPAXsT2wS"></span>
+  </div>
+
+  <!-- 微信查看器 -->
+  <div id="viewer" style="display:none;" data-page-node-id="u9to0bu9UnhPEejDHufLch">
+    <div class="stage" data-page-node-id="qJMSFFz3ke8FmSRIYYsvB4">
+      <div class="phone" id="phone" data-page-node-id="TNTG0VZevsBSSel0A4Inz2">
+        <header class="topbar" data-page-node-id="ijrJQ4tmR0eIa52ewljVQD">
+          <button class="ic" id="btnTop" title="回到顶部" data-page-node-id="0p5FGAvUypzRxy3DXsAoRn">↑</button>
+          <div class="title" id="titleText" data-page-node-id="c7UJMgOg5p81Ox9zKfqvfE">聊天记录<small id="msgCount" data-page-node-id="VcK5xMJ51aHyk0h4tOipHh"></small></div>
+          <button class="ic" id="btnBottom" title="到底部" data-page-node-id="plKx4owcRL0kq6Z51kdKEw">↓</button>
+        </header>
+
+        <div class="toolbar" data-page-node-id="8TxSS7KrdrtoKvgeeJuUUl">
+          <input id="search" type="search" placeholder="搜索内容 / 发送人" data-page-node-id="WU0Fvlf5BvkxeS8xhcfwuo">
+          <select id="month" data-page-node-id="6AGMDPl9OQSABNokWGORnB"></select>
+          <button class="btn" id="btnSelect" data-page-node-id="xhA8Fjfc4Yj8478grZqzcb">选择</button>
+          <button class="btn primary" id="btnGallery" data-page-node-id="afATrpCcFI8CJFis1AaQva">图片库</button>
+        </div>
+
+        <div class="chat" id="chat" data-page-node-id="LbBVnpIFB9gJMgxJvP2MGX"></div>
+
+        <button class="fab" id="btnJumpTop" title="回到顶部" data-page-node-id="YGdDK6bWPICba9xyP9ukaa">↑</button>
+
+        <div class="actionbar" data-page-node-id="yvc8TgjQJgrw7MNg2Ka8u1">
+          <span class="cnt" id="selCnt" data-page-node-id="J7OlXnvVsVzrwqSa3vq335">已选 0 条</span>
+          <button class="btn gray" id="btnAll" data-page-node-id="W2dcbk4h1gvHEBnP6NYRCF">全选</button>
+          <button class="btn gray" id="btnClear" data-page-node-id="RyHHDDbIM1dOvxaK7hZb1j">清空</button>
+          <button class="btn green" id="btnExport" data-page-node-id="gKIzjH8jd4hp5BC3eEei4l">导出图片</button>
+          <button class="btn gray" id="btnCancel" data-page-node-id="ucxxghgplaEhXWvxis3sRM">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 图片库 -->
+  <div class="modal" id="galleryModal" data-page-node-id="FVhXAYuioEPc7CXYwuOEdh">
+    <div class="sheet" data-page-node-id="BBGFDOPgZjiCa3A5bY3wRE">
+      <div class="h" data-page-node-id="rAf1Nv2KrgtDETc06PYrht">
+        <span class="t" data-page-node-id="Y9iVXRi6kzrK2wIT3Vw6hN">图片库（<span id="gCount" data-page-node-id="FjAoWKdXRu5jN7f70uyuH2"></span>）</span>
+        <button class="x" id="btnGalleryClose" data-page-node-id="sBpUA7ggwHITbYHZuv2eoA">✕</button>
+      </div>
+      <div class="grid" id="gGrid" data-page-node-id="bGVOAC5VdVHpFPtuEBssq7"></div>
+      <div class="foot" data-page-node-id="S0fIdIE0wYW6ydreyFGUQN">图片为在线链接，联网时显示。点击可查看大图。</div>
+    </div>
+  </div>
+
+<script id="viewer-js">
+/* ===== 微信查看器逻辑（同时用于本页和「导出HTML」生成的独立文件） ===== */
+function getData(){ return window.DATA || []; }
+function getSelf(){ return window.SELF || ""; }
+function getTitle(){ return window.TITLE || "聊天记录"; }
+
+var EMOJI = {
+  "[抱拳]":"🙏","[合十]":"🙏","[玫瑰]":"🌹","[握手]":"🤝","[拥抱]":"🤗",
+  "[呲牙]":"😁","[鼓掌]":"👏","[鲜花]":"💐","[语音]":"🎤","[苦笑]":"😅"
+};
+var PALETTE = ["#5B8DEF","#7BC675","#F2A65A","#E56B6B","#6CB9D6","#9B8DE8","#E88BB5","#58B8A6","#E8A75A","#7C8FE0","#62C3B3","#D98BC8"];
+function avatarColor(name){
+  var h=0; for(var i=0;i<name.length;i++){h=(h*31+name.charCodeAt(i))>>>0;}
+  return PALETTE[h%PALETTE.length];
+}
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function renderText(t){
+  var s=esc(t);
+  s=s.replace(/\[[^\]]{1,4}\]/g,function(m){ return EMOJI[m]?('<span class="emoji">'+EMOJI[m]+'</span>'):m; });
+  s=s.split("\n").map(function(l){return l.replace(/^[ \t\u2005]+/,"");}).join("\n");
+  return s;
+}
+function pad(n){return (n<10?"0":"")+n;}
+function fmtTime(dt){ var h=+dt.slice(11,13), m=dt.slice(14,16); var tag=h<6?"凌晨":h<9?"早上":h<12?"上午":h<14?"中午":h<18?"下午":"晚上"; return tag+" "+pad(h)+":"+m; }
+function fmtDay(dt){ return +dt.slice(0,4)+"年"+ +dt.slice(5,7)+"月"+ +dt.slice(8,10)+"日"; }
+function monthKey(dt){ return dt.slice(0,7); }
+
+var chat=document.getElementById("chat");
+var selected=new Set();
+var selectMode=false;
+var filter="";
+
+/* 图片懒加载：只在接近可视区域时才加载/解码 */
+var imgObserver = ("IntersectionObserver" in window) ? new IntersectionObserver(function(entries){
+  entries.forEach(function(en){
+    if(en.isIntersecting){
+      var im=en.target;
+      if(im.dataset.src){ im.src=im.dataset.src; im.removeAttribute("data-src"); }
+      imgObserver.unobserve(im);
+    }
+  });
+}, {root: chat, rootMargin: "600px"}) : null;
+
+function isSelf(m){ return m.n===getSelf(); }
+function buildMsg(m,i){
+  var el=document.createElement("div");
+  el.className="msg "+(isSelf(m)?"right":"left");
+  el.dataset.i=i;
+  var name=m.n||"";
+  var av=document.createElement("div");
+  av.className="avatar"; av.style.background=avatarColor(name); av.textContent=name.charAt(0);
+  var sel=document.createElement("div"); sel.className="selmark"; sel.textContent="✓";
+  var body=document.createElement("div"); body.className="body";
+  var bub=document.createElement("div"); bub.className="bubble";
+  if(m.t==="text"){
+    bub.innerHTML=renderText(m.x);
+  }else if(m.t==="img"){
+    var im=document.createElement("img");
+    im.className="img"; im.draggable=false; im.alt="图片";
+    if(m.w && m.h){
+      var dw=Math.min(220, m.w), dh=dw*m.h/m.w;
+      if(dh>320){ dh=320; dw=dh*m.w/m.h; }
+      im.style.width=Math.round(dw)+"px";
+      im.style.height=Math.round(dh)+"px";
+    }
+    if(imgObserver){ im.dataset.src=m.img; imgObserver.observe(im); }
+    else { im.src=m.img; }
+    bub.appendChild(im);
+  }
+  if(!isSelf(m)){
+    var nm=document.createElement("div"); nm.className="name"; nm.textContent=name; body.appendChild(nm);
+  }
+  body.appendChild(bub);
+  el.appendChild(av); el.appendChild(body); el.appendChild(sel);
+  el.addEventListener("click",function(){ if(selectMode){ toggle(i,el); } });
+  return el;
+}
+function toggle(i,el){
+  if(selected.has(i)){selected.delete(i); el.classList.remove("selected");}
+  else{selected.add(i); el.classList.add("selected");}
+  updateSelCnt();
+}
+/* 分片渲染 */
+var renderList=[], renderPos=0, renderLastDay=null, renderLastTs=0, renderTimer=null, scrollToBottomOnDone=false;
+function render(){
+  var DATA=getData();
+  renderList=[];
+  var kw=filter.toLowerCase();
+  DATA.forEach(function(m,i){
+    if(kw){
+      var hay=(m.n+" "+(m.x||"")).toLowerCase();
+      if(hay.indexOf(kw)<0) return;
+    }
+    renderList.push({m:m, i:i});
+  });
+  chat.innerHTML="";
+  renderPos=0; renderLastDay=null; renderLastTs=0;
+  document.getElementById("msgCount").textContent="("+DATA.length+")";
+  if(renderTimer){ clearTimeout(renderTimer); }
+  scheduleChunk();
+}
+function scheduleChunk(){
+  if(renderPos<renderList.length){ renderTimer=setTimeout(renderChunk,0); }
+}
+function renderChunk(){
+  var CHUNK=200;
+  var frag=document.createDocumentFragment();
+  var end=Math.min(renderPos+CHUNK, renderList.length);
+  for(; renderPos<end; renderPos++){
+    var it=renderList[renderPos], m=it.m, i=it.i;
+    var day=(m.d||"").slice(0,10);
+    if(day!==renderLastDay){
+      var dl=document.createElement("div"); dl.className="dayline";
+      var ds=document.createElement("span"); ds.textContent=fmtDay(m.d); dl.appendChild(ds);
+      frag.appendChild(dl);
+      renderLastDay=day; renderLastTs=0;
+    }
+    var ts=new Date((m.d||"").replace(" ","T")).getTime();
+    if(renderLastTs && (ts-renderLastTs)>15*60*1000){
+      var tl=document.createElement("div"); tl.className="timeline";
+      var ts2=document.createElement("span"); ts2.textContent=fmtTime(m.d); tl.appendChild(ts2);
+      frag.appendChild(tl);
+    }
+    renderLastTs=ts;
+    var el=buildMsg(m,i);
+    if(selected.has(i)) el.classList.add("selected");
+    frag.appendChild(el);
+  }
+  chat.appendChild(frag);
+  updateSelCnt();
+  if(renderPos<renderList.length){ scheduleChunk(); }
+  else if(scrollToBottomOnDone){ chat.scrollTop=chat.scrollHeight; }
+}
+function setSelectMode(v){
+  selectMode=v;
+  document.body.classList.toggle("selecting",v);
+}
+function updateSelCnt(){ document.getElementById("selCnt").textContent="已选 "+selected.size+" 条"; }
+
+/* ===== 月份跳转 ===== */
+function initMonth(){
+  var DATA=getData();
+  var monthSel=document.getElementById("month");
+  monthSel.innerHTML="";
+  var months=[], seen={};
+  DATA.forEach(function(m){ var k=monthKey(m.d); if(!seen[k]){seen[k]=1; months.push(k);} });
+  months.forEach(function(k){
+    var o=document.createElement("option"); o.value=k; o.textContent=k; monthSel.appendChild(o);
+  });
+}
+function scrollToMsg(i){
+  var node=chat.querySelector('.msg[data-i="'+i+'"]');
+  if(node) node.scrollIntoView({block:"start"});
+}
+
+/* ===== 事件绑定 ===== */
+document.getElementById("btnSelect").addEventListener("click",function(){ setSelectMode(!selectMode); });
+document.getElementById("btnCancel").addEventListener("click",function(){ setSelectMode(false); });
+document.getElementById("btnAll").addEventListener("click",function(){
+  renderList.forEach(function(it){ selected.add(it.i); });
+  chat.querySelectorAll(".msg").forEach(function(n){ n.classList.add("selected"); });
+  updateSelCnt();
+});
+document.getElementById("btnClear").addEventListener("click",function(){
+  selected.clear();
+  chat.querySelectorAll(".msg.selected").forEach(function(n){ n.classList.remove("selected"); });
+  updateSelCnt();
+});
+document.getElementById("search").addEventListener("input",function(){ filter=this.value.trim(); render(); });
+document.getElementById("month").addEventListener("change",function(){
+  var k=this.value; if(!k) return;
+  var DATA=getData();
+  for(var i=0;i<DATA.length;i++){ if(monthKey(DATA[i].d)===k){ scrollToMsg(i); break; } }
+});
+document.getElementById("btnJumpTop").addEventListener("click",function(){ chat.scrollTo({top:0,behavior:"smooth"}); });
+document.getElementById("btnTop").addEventListener("click",function(){ chat.scrollTo({top:0,behavior:"smooth"}); });
+document.getElementById("btnBottom").addEventListener("click",function(){ chat.scrollTo({top:chat.scrollHeight,behavior:"smooth"}); });
+
+/* ===== 图片库 ===== */
+var galleryModal=document.getElementById("galleryModal");
+document.getElementById("btnGallery").addEventListener("click",function(){
+  var DATA=getData();
+  var g=document.getElementById("gGrid"); g.innerHTML="";
+  var cnt=0;
+  DATA.forEach(function(m){
+    if(m.t!=="img") return;
+    cnt++;
+    var box=document.createElement("div"); box.className="g";
+    var im=document.createElement("img"); im.src=m.img; im.loading="lazy";
+    im.addEventListener("click",function(){ window.open(m.img,"_blank"); });
+    box.appendChild(im); g.appendChild(box);
+  });
+  document.getElementById("gCount").textContent=cnt;
+  galleryModal.classList.add("show");
+});
+document.getElementById("btnGalleryClose").addEventListener("click",function(){ galleryModal.classList.remove("show"); });
+galleryModal.addEventListener("click",function(e){ if(e.target===galleryModal) galleryModal.classList.remove("show"); });
+
+/* ===== 导出为图片（Canvas 绘制；远程图片无 CORS，画占位框避免污染 canvas） ===== */
+var EXPORT_WIDTH=480, EXPORT_SCALE=2;
+var FONT_TEXT="16px -apple-system,'PingFang SC','Microsoft YaHei',sans-serif";
+document.getElementById("btnExport").addEventListener("click",exportImage);
+function prepareText(t){
+  var s=String(t);
+  s=s.replace(/\[[^\]]{1,4}\]/g,function(m){return EMOJI[m]||m;});
+  s=s.split("\n").map(function(l){return l.replace(/^[ \t\u2005]+/,"");}).join("\n");
+  return s;
+}
+function wrapText(text,maxW){
+  var c=document.createElement("canvas").getContext("2d"); c.font=FONT_TEXT;
+  var lines=[];
+  text.split("\n").forEach(function(p){
+    if(p===""){lines.push("");return;}
+    var cur="";
+    for(var i=0;i<p.length;i++){ var ch=p[i]; var test=cur+ch; if(c.measureText(test).width<=maxW) cur=test; else{ if(cur) lines.push(cur); cur=ch; } }
+    if(cur) lines.push(cur);
+  });
+  return lines;
+}
+function roundRect(ctx,x,y,w,h,r){
+  if(typeof r==="number") r={tl:r,tr:r,br:r,bl:r};
+  ctx.beginPath();
+  ctx.moveTo(x+r.tl,y);
+  ctx.lineTo(x+w-r.tr,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r.tr);
+  ctx.lineTo(x+w,y+h-r.br); ctx.quadraticCurveTo(x+w,y+h,x+w-r.br,y+h);
+  ctx.lineTo(x+r.bl,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r.bl);
+  ctx.lineTo(x,y+r.tl); ctx.quadraticCurveTo(x,y,x+r.tl,y);
+  ctx.closePath();
+}
+function exportImage(){
+  var DATA=getData();
+  var idx=[...selected].sort(function(a,b){return a-b;});
+  if(idx.length===0){ alert("请先点「选择」并勾选要导出的消息"); return; }
+  if(idx.length>300){ alert("所选消息过多，建议分多次导出（每次 ≤300 条）"); return; }
+
+  var W=EXPORT_WIDTH, padX=12, padTop=14, padBot=20, avW=40, gap=8;
+  var TEXT_MAX=340, IMG_MAX_W=220, IMG_MAX_H=320;
+  var padVY=9, padHX=12, lineH=23, msgGap=8;
+
+  var items=[]; var y=0; var headerH=64;
+  items.push({type:"header",y:y,h:headerH}); y+=headerH; y+=padTop;
+  var lastDay=null,lastTs=0;
+  idx.forEach(function(i){
+    var m=DATA[i];
+    var day=(m.d||"").slice(0,10);
+    if(day!==lastDay){ var dh=10+22+10; items.push({type:"day",y:y,h:dh,text:fmtDay(m.d)}); y+=dh; lastDay=day; lastTs=0; }
+    var ts=new Date((m.d||"").replace(" ","T")).getTime();
+    if(lastTs && (ts-lastTs)>15*60*1000){ var th=4+11+4; items.push({type:"time",y:y,h:th,text:fmtTime(m.d)}); y+=th; }
+    lastTs=ts;
+    var self=isSelf(m);
+    var nameH=self?0:(15+2);
+    var bw,bh,lines,maxLW,iw,ih;
+    if(m.t==="text"){
+      lines=wrapText(prepareText(m.x), TEXT_MAX-2*padHX);
+      var c=document.createElement("canvas").getContext("2d"); c.font=FONT_TEXT;
+      var mx=0; for(var li=0;li<lines.length;li++){ var w=c.measureText(lines[li]).width; if(w>mx) mx=w; }
+      maxLW=mx;
+      bw=Math.min(TEXT_MAX, Math.ceil(maxLW)+2*padHX);
+      bh=padVY*2 + lines.length*lineH;
+    }else{
+      iw=IMG_MAX_W; ih=140;
+      bw=iw+2*padHX; bh=ih+2*padVY;
+    }
+    var rowH=Math.max(avW, nameH+bh);
+    items.push({type:"msg",y:y,h:rowH,m:m,self:self,lines:lines,bw:bw,bh:bh,iw:iw,ih:ih});
+    y+=rowH; y+=msgGap;
+  });
+  y+=padBot; var H=y;
+
+  var scale=EXPORT_SCALE;
+  var canvas=document.createElement("canvas");
+  canvas.width=W*scale; canvas.height=H*scale;
+  var ctx=canvas.getContext("2d");
+  ctx.scale(scale,scale); ctx.textBaseline="top";
+  ctx.fillStyle="#EDEDED"; ctx.fillRect(0,0,W,H);
+
+  items.forEach(function(it){
+    if(it.type==="header"){
+      ctx.fillStyle="#E5E5E5"; ctx.fillRect(0,it.y+it.h-1,W,1);
+      ctx.fillStyle="#181818"; ctx.font="600 16px -apple-system,'PingFang SC',sans-serif"; ctx.textAlign="center";
+      ctx.fillText(getTitle(), W/2, it.y+10);
+      ctx.font="12px -apple-system,'PingFang SC',sans-serif"; ctx.fillStyle="#999";
+      var sub="共 "+idx.length+" 条消息 · "+fmtDay(DATA[idx[0]].d)+" — "+fmtDay(DATA[idx[idx.length-1]].d);
+      ctx.fillText(sub, W/2, it.y+32); ctx.textAlign="start";
+    } else if(it.type==="day"){
+      ctx.font="12px -apple-system,'PingFang SC',sans-serif";
+      var pillW=ctx.measureText(it.text).width+20, pillH=22;
+      var px=(W-pillW)/2, py=it.y+10;
+      ctx.fillStyle="#D7D7D7"; roundRect(ctx,px,py,pillW,pillH,4); ctx.fill();
+      ctx.fillStyle="#fff"; ctx.textAlign="center"; ctx.fillText(it.text, W/2, py+5); ctx.textAlign="start";
+    } else if(it.type==="time"){
+      ctx.font="11px -apple-system,'PingFang SC',sans-serif"; ctx.fillStyle="#B2B2B2"; ctx.textAlign="center";
+      ctx.fillText(it.text, W/2, it.y+4); ctx.textAlign="start";
+    } else if(it.type==="msg"){
+      var avX=it.self ? (W-padX-avW) : padX;
+      var avY=it.y;
+      ctx.fillStyle=avatarColor(it.m.n||""); roundRect(ctx,avX,avY,avW,avW,{tl:6,tr:6,br:6,bl:6}); ctx.fill();
+      ctx.fillStyle="#fff"; ctx.font="500 17px -apple-system,'PingFang SC',sans-serif"; ctx.textAlign="center";
+      ctx.fillText((it.m.n||"").charAt(0), avX+avW/2, avY+10.5); ctx.textAlign="start";
+      var nameH=it.self?0:(15+2);
+      if(!it.self){ ctx.font="12px -apple-system,'PingFang SC',sans-serif"; ctx.fillStyle="#999"; ctx.fillText(it.m.n, avX+avW+gap+2, avY); }
+      var bubX=it.self ? (avX-gap-it.bw) : (avX+avW+gap);
+      var bubY=avY+nameH;
+      ctx.fillStyle=it.self?"#95EC69":"#fff";
+      var rr=8;
+      if(it.self) roundRect(ctx,bubX,bubY,it.bw,it.bh,{tl:rr,tr:2,br:rr,bl:rr});
+      else roundRect(ctx,bubX,bubY,it.bw,it.bh,{tl:2,tr:rr,br:rr,bl:rr});
+      ctx.fill();
+      if(it.m.t==="text"){
+        ctx.font=FONT_TEXT; ctx.fillStyle="#111";
+        var tx=bubX+padHX, ty=bubY+padVY;
+        for(var li=0;li<it.lines.length;li++){ ctx.fillText(it.lines[li], tx, ty+li*lineH); }
+      }else{
+        var ix=bubX+padHX, iy=bubY+padVY;
+        ctx.fillStyle="#e8e8e8"; roundRect(ctx,ix,iy,it.iw,it.ih,4); ctx.fill();
+        ctx.fillStyle="#999"; ctx.font="13px sans-serif"; ctx.textAlign="center";
+        ctx.fillText("图片（需在线查看）", ix+it.iw/2, iy+it.ih/2); ctx.textAlign="start";
+      }
+    }
+  });
+
+  canvas.toBlob(function(blob){
+    if(!blob){alert("生成失败");return;}
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=(getTitle()||"聊天记录")+"_聊天记录.png";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){URL.revokeObjectURL(a.href);},3000);
+  },"image/png");
+}
+
+/* ===== 启动（设置标题 + 渲染） ===== */
+function bootViewer(){
+  document.getElementById("titleText").innerHTML = esc(getTitle()) + '<small id="msgCount"></small>';
+  render();
+  initMonth();
+}
+</script>
+
+<script>
+/* ===== 转换器逻辑：拖拽/选择文件 → 解析 → 显示 ===== */
+(function(){
+  var dz = document.getElementById("dropzone");
+  var dzBox = document.getElementById("dzBox");
+  var fileInput = document.getElementById("fileInput");
+  var convbar = document.getElementById("convbar");
+  var viewer = document.getElementById("viewer");
+  var selfName = document.getElementById("selfName");
+  var fileInfo = document.getElementById("fileInfo");
+
+  function parseSource(text){
+    var m = text.match(/var\s+array\s*=\s*(\[[\s\S]*?\])\s*;\s*var\s+html/);
+    if(!m) m = text.match(/var\s+array\s*=\s*(\[[\s\S]*\])/);
+    if(!m) return null;
+    var arr;
+    try { arr = new Function("return " + m[1] + ";")(); }
+    catch(e){ return null; }
+    if(!Array.isArray(arr)) return null;
+    var msgs = [];
+    arr.forEach(function(o){
+      if(!o || typeof o!=="object") return;
+      var t = o.type || "";
+      if(t==="GROUP_TEXT" || t==="SINGLE_TEXT"){
+        msgs.push({t:"text", n:o.fromName||"", d:o.datetime||"", ts:o.createdTime||0, x:o.content||""});
+      } else if(t==="GROUP_IMAGE" || t==="SINGLE_IMAGE"){
+        var c={}; try{ c=JSON.parse(o.content||"{}"); }catch(e){}
+        var url = c.serverimg_url || c.serverpath || "";
+        if(url) msgs.push({t:"img", n:o.fromName||"", d:o.datetime||"", ts:o.createdTime||0, img:url, w:c.img_width, h:c.img_height});
+      }
+    });
+    msgs.sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+    return msgs;
+  }
+
+  function handleFile(file){
+    if(!file) return;
+    var stem = (file.name||"聊天记录").replace(/\.html?$/i,"");
+    var reader = new FileReader();
+    reader.onload = function(){
+      var msgs = parseSource(String(reader.result));
+      if(!msgs || !msgs.length){
+        alert("未能解析该文件，请确认是「学海/微信」导出的聊天 HTML。");
+        return;
+      }
+      window.DATA = msgs;
+      window.TITLE = stem;
+      window.SELF = selfName.value.trim();
+      fileInfo.textContent = "共 "+msgs.length+" 条";
+      dz.style.display = "none";
+      convbar.style.display = "flex";
+      viewer.style.display = "block";
+      scrollToBottomOnDone = true;
+      bootViewer();
+    };
+    reader.readAsText(file);
+  }
+
+  // 点击选择文件
+  dzBox.addEventListener("click", function(){ fileInput.click(); });
+  fileInput.addEventListener("change", function(){ handleFile(fileInput.files[0]); });
+
+  // 拖拽
+  ["dragenter","dragover"].forEach(function(ev){
+    dz.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); dzBox.classList.add("drag"); });
+  });
+  ["dragleave","drop"].forEach(function(ev){
+    dz.addEventListener(ev, function(e){ e.preventDefault(); e.stopPropagation(); dzBox.classList.remove("drag"); });
+  });
+  dz.addEventListener("drop", function(e){
+    var files = e.dataTransfer && e.dataTransfer.files;
+    if(files && files.length){ handleFile(files[0]); }
+  });
+
+  // 我的昵称：修改后重新渲染
+  selfName.addEventListener("change", function(){
+    window.SELF = this.value.trim();
+    if(window.DATA){ render(); }
+  });
+
+  // 换文件
+  document.getElementById("btnReset").addEventListener("click", function(){
+    window.DATA = null;
+    selected.clear();
+    setSelectMode(false);
+    dz.style.display = "flex";
+    convbar.style.display = "none";
+    viewer.style.display = "none";
+    fileInput.value = "";
+  });
+
+  // 导出 HTML（生成独立查看器文件）
+  document.getElementById("btnExportHtml").addEventListener("click", function(){
+    if(!window.DATA || !window.DATA.length){ alert("请先拖入文件"); return; }
+    var style = document.getElementById("viewer-style").textContent;
+    var viewerJs = document.getElementById("viewer-js").textContent;
+    // 清理动态内容后克隆静态结构
+    var chatEl = document.getElementById("chat");
+    var savedChat = chatEl.innerHTML; chatEl.innerHTML = "";
+    var monthEl = document.getElementById("month");
+    var savedMonth = monthEl.innerHTML; monthEl.innerHTML = "";
+    var markup = document.getElementById("viewer").outerHTML + "\n" + document.getElementById("galleryModal").outerHTML;
+    chatEl.innerHTML = savedChat; monthEl.innerHTML = savedMonth;
+
+    var dataJson = JSON.stringify(window.DATA).replace(/</g,"\\u003c").replace(/\u2028/g,"\\u2028").replace(/\u2029/g,"\\u2029");
+    var html = "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"UTF-8\">"
+      + "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no\">"
+      + "<meta name=\"format-detection\" content=\"telephone=no\">"
+      + "<title>" + esc(getTitle()) + " · 聊天记录</title>"
+      + "<style>" + style + "</style></head><body>"
+      + markup
+      + "<script>window.DATA=" + dataJson + ";window.SELF=" + JSON.stringify(window.SELF||"") + ";window.TITLE=" + JSON.stringify(window.TITLE||"") + ";<\/script>"
+      + "<script>" + viewerJs + "<\/script>"
+      + "<script>bootViewer();<\/script>"
+      + "</body></html>";
+
+    var blob = new Blob([html], {type:"text/html;charset=utf-8"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (window.TITLE||"聊天记录") + "_聊天记录.html";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 3000);
+  });
+})();
+</script>
+</body>
+</html>
