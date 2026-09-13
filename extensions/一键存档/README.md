@@ -18,9 +18,10 @@
 
 ```
 web-note-saver/
-├── saver/                    # 本地存档工具（Python）
+├── 一键存档.exe              # 打包好的本地工具（免装 Python，双击即用）
+├── saver/                    # 本地工具源码（Python）
 │   ├── saver.py              # 主程序：HTTP 服务 + 剪贴板监听 + 托盘
-│   ├── start.bat             # 一键启动脚本（自动安装依赖）
+│   ├── start.bat             # 从源码启动（自动安装依赖）
 │   ├── config.example.json   # 配置模板（首次启动会自动生成 config.json）
 │   └── config.json           # 实际配置（含访问令牌，不入库）
 └── webext/                   # 浏览器扩展（Edge / Chrome）
@@ -31,19 +32,25 @@ web-note-saver/
     └── icons/
 ```
 
-> 仓库中不包含：`config.json`（含本机路径与访问令牌）、`我的笔记.md`（个人笔记）、`一键存档.exe`（打包产物）。
-> 这些文件已通过 `.gitignore` 排除，克隆后按下方步骤即可生成。
+> 仓库中不包含 `config.json`（含本机路径与访问令牌）和 `我的笔记.md`（个人笔记内容），
+> 已通过 `.gitignore` 排除，首次运行时自动生成。
+
+## 快速启动（推荐）
+
+双击 **`一键存档.exe`**（已打包，无需安装 Python）。黑窗口出现并显示访问令牌，即启动成功。
+
+> 从源码运行：双击 `saver\start.bat`（需要电脑已安装 Python，首次运行会自动装依赖）。
 
 ## 安装步骤（约 5 分钟）
 
-### 第 1 步：安装 Python
+### 第 1 步：安装 Python（仅源码方式需要）
 
-如果电脑上还没有 Python：到 https://www.python.org/downloads/ 下载 Windows 安装包，
+用 `一键存档.exe` 可跳过本步。若要从源码运行：到 https://www.python.org/downloads/ 下载 Windows 安装包，
 **安装时务必勾选 "Add python.exe to PATH"**，装完重启终端即可。
 
 ### 第 2 步：启动本地存档工具
 
-双击 `saver\start.bat`。首次运行会自动安装依赖（需联网，约 1 分钟）。
+双击 `一键存档.exe`（推荐），或双击 `saver\start.bat`（源码方式，首次运行会自动安装依赖，需联网约 1 分钟）。
 
 启动后窗口会显示：
 

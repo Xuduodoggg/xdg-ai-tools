@@ -6,6 +6,5 @@ saver/config.json
 我的笔记.md
 notes.md
 
-# 打包产物
-*.exe
+# 构建临时文件
 __pycache__/

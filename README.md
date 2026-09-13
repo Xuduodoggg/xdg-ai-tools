@@ -44,9 +44,9 @@
 - 本地服务只监听 `127.0.0.1`，写入需访问令牌校验，内容不出本机
 - 内置去重与智能过滤（忽略过短文本、纯链接、纯数字）
 
-**安装**：先双击 `extensions/一键存档/saver/start.bat` 启动本地服务（首次运行会自动安装依赖），再按上面的方式加载 `extensions/一键存档/webext/` 文件夹。
+**安装**：先启动本地服务——双击 `extensions/一键存档/一键存档.exe`（已打包，无需安装 Python），或双击 `extensions/一键存档/saver/start.bat`（源码方式，需已安装 Python）；再按上面的方式加载 `extensions/一键存档/webext/` 文件夹。
 
-> 仓库不包含 `config.json`（含本机路径与访问令牌）、个人笔记文件和打包好的 exe，这些已通过 `.gitignore` 排除。
+> 仓库不包含 `config.json`（含本机路径与访问令牌）与个人笔记文件，已通过 `.gitignore` 排除，首次运行时会自动生成。
 
 ## 项目结构
 
@@ -59,9 +59,10 @@ xdg-ai-tools/
 │   └── 用眼时长提示器.html
 ├── extensions/                 # 浏览器扩展
 │   ├── 划词英译中/              # 划词翻译扩展
-│   └── 一键存档/                # 扩展 + Python 本地服务
+│   └── 一键存档/                # 扩展 + 本地服务
+│       ├── 一键存档.exe         # 打包好的本地服务（免装 Python）
 │       ├── webext/             # 扩展部分
-│       └── saver/              # 本地服务（Python）
+│       └── saver/              # 本地服务源码（Python）
 ├── .nojekyll                   # 跳过 Jekyll 处理，保证页面原样发布
 └── README.md
 ```
