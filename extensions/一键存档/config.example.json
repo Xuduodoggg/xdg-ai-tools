@@ -1,0 +1,13 @@
+{
+  "notes_path": "我的笔记.md",
+  "port": 8631,
+  "token": "",
+  "min_length": 15,
+  "ignore_urls": true,
+  "ignore_pure_digits": true,
+  "clipboard_enabled": true,
+  "dedupe_window": 5,
+  "max_len": 8000,
+  "ignore_browser_copy": true,
+  "browser_processes": "msedge.exe,chrome.exe,firefox.exe,brave.exe,opera.exe"
+}

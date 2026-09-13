@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>划词翻译</title>
+<style>
+  :root {
+    --bg: #15181f;
+    --panel: #1e232e;
+    --panel2: #242a37;
+    --border: #333c4d;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #2b6cb0;
+    --ok: #3f9d63;
+    --err: #e06c6c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 13px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    width: 340px;
+    padding: 14px;
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .title {
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .logo {
+    width: 22px; height: 22px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, #2b6cb0, #4299e1);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 11px; font-weight: 700;
+  }
+  .engine-tag {
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2px 9px;
+  }
+  textarea {
+    width: 100%;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 9px 11px;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 64px;
+    max-height: 180px;
+    outline: none;
+    font-family: inherit;
+  }
+  textarea:focus { border-color: var(--accent); }
+  .actions { display: flex; gap: 8px; margin: 10px 0; }
+  button {
+    border: none;
+    border-radius: 7px;
+    padding: 8px 14px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .primary { background: var(--accent); color: #fff; flex: 1; }
+  .primary:hover { background: #1a5aa8; }
+  .ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+  .ghost:hover { border-color: var(--accent); }
+  .result {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    min-height: 60px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 13px;
+    color: #fff;
+    display: none;
+  }
+  .result.show { display: block; }
+  .result .label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  .status { font-size: 12px; min-height: 18px; margin-top: 6px; }
+  .status.ok { color: var(--ok); }
+  .status.err { color: var(--err); }
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .foot a { color: #7fa6e0; text-decoration: none; cursor: pointer; }
+  .foot a:hover { text-decoration: underline; }
+  .kbd {
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 4px;
+    padding: 0 5px;
+    font-size: 10px;
+  }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div class="title"><span class="logo">译</span>划词翻译</div>
+    <span class="engine-tag" id="engineTag">自动</span>
+  </div>
+
+  <textarea id="input" placeholder="输入或粘贴英文，点击翻译…（在网页上直接选中文字更快捷）"></textarea>
+
+  <div class="actions">
+    <button class="primary" id="translateBtn">翻 译</button>
+    <button class="ghost" id="copyBtn">复制</button>
+  </div>
+
+  <div class="result" id="result">
+    <div class="label">翻译结果</div>
+    <div id="resultText"></div>
+  </div>
+  <div class="status" id="status"></div>
+
+  <div class="foot">
+    <span>网页划词：选中文字 → 点「译」或按 <span class="kbd">Alt+T</span></span>
+    <a id="openOptions">设置</a>
+  </div>
+
+<script src="popup.js"></script>
+</body>
+</html>

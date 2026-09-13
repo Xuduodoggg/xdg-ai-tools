@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>划词翻译 · 设置</title>
+<style>
+  :root {
+    --bg: #15181f;
+    --panel: #1e232e;
+    --panel2: #242a37;
+    --border: #333c4d;
+    --text: #e6e9ef;
+    --muted: #9aa3b2;
+    --accent: #2b6cb0;
+    --accent-h: #1a5aa8;
+    --ok: #3f9d63;
+    --err: #e06c6c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.7 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    min-width: 560px;
+    padding: 24px 28px 40px;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .logo {
+    width: 30px; height: 30px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #2b6cb0, #4299e1);
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px; font-weight: 700;
+  }
+  .sub { color: var(--muted); font-size: 13px; margin: 0 0 20px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-size: 14px;
+    margin: 0 0 12px;
+    color: #9fb6ff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .field { margin-bottom: 12px; }
+  .field:last-child { margin-bottom: 0; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  input, select {
+    width: 100%;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 7px;
+    padding: 8px 10px;
+    font-size: 13px;
+    outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  .row { display: flex; gap: 12px; }
+  .row .field { flex: 1; }
+  .radio-group { display: flex; gap: 18px; }
+  .radio-group label {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--text); font-size: 13px; cursor: pointer;
+    margin: 0;
+  }
+  .radio-group input { width: auto; }
+  .hint {
+    font-size: 12px;
+    color: var(--muted);
+    background: rgba(255,255,255,0.04);
+    border-radius: 7px;
+    padding: 8px 10px;
+    margin-top: 8px;
+    line-height: 1.6;
+  }
+  .hint a { color: #7fa6e0; }
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+  button {
+    border: none;
+    border-radius: 7px;
+    padding: 9px 18px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  .primary { background: var(--accent); color: #fff; }
+  .primary:hover { background: var(--accent-h); }
+  .ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--border); }
+  .ghost:hover { border-color: var(--accent); }
+  #status { font-size: 13px; }
+  #status.ok { color: var(--ok); }
+  #status.err { color: var(--err); }
+  #testResult {
+    margin-top: 10px;
+    background: var(--panel2);
+    border-radius: 7px;
+    padding: 10px 12px;
+    font-size: 13px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    display: none;
+  }
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    border-radius: 20px;
+    padding: 2px 9px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .pill.free { background: rgba(63,157,99,0.2); color: #7fd09a; }
+  .pill.key  { background: rgba(224,108,108,0.2); color: #f09a9a; }
+</style>
+</head>
+<body>
+  <h1><span class="logo">译</span>划词翻译 · 设置</h1>
+  <p class="sub">选中网页文字即可一键翻译。默认使用免费引擎，无需配置即可使用；国内网络下推荐配置百度翻译。</p>
+
+  <div class="panel">
+    <h2>翻译引擎</h2>
+    <div class="radio-group" id="engineGroup">
+      <label><input type="radio" name="engine" value="auto"> 自动（免费，无需配置）</label>
+      <label><input type="radio" name="engine" value="baidu"> 百度翻译</label>
+      <label><input type="radio" name="engine" value="openai"> OpenAI 兼容</label>
+    </div>
+    <div class="hint">
+      <b>自动</b>：优先调用 MyMemory 免费接口，失败时自动切换 Google 免费接口，零配置即用。<br>
+      <b>百度翻译</b>：国内访问快，标准版免费。去
+      <a href="https://fanyi-api.baidu.com/" target="_blank">百度翻译开放平台</a> 注册后获取 AppID 和密钥。
+      <span class="pill free">免费额度</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>翻译方向</h2>
+    <div class="field">
+      <select id="direction">
+        <option value="auto">自动检测 → 中文（英文译中文，中文译英文）</option>
+        <option value="en2zh">固定：英文 → 中文</option>
+        <option value="zh2en">固定：中文 → 英文</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="panel" id="baiduPanel">
+    <h2>百度翻译配置 <span class="pill key">需要密钥</span></h2>
+    <div class="row">
+      <div class="field">
+        <label>AppID</label>
+        <input id="baiduAppId" type="text" placeholder="例如：2026081700000001" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>密钥（Secret Key）</label>
+        <input id="baiduSecretKey" type="password" placeholder="请填写密钥" autocomplete="off">
+      </div>
+    </div>
+    <div class="hint">申请步骤：注册开放平台 → 创建应用（选择「通用翻译」）→ 在「开发者信息」中获取 AppID 与密钥。密钥仅保存在你本地浏览器中。</div>
+  </div>
+
+  <div class="panel" id="openaiPanel">
+    <h2>OpenAI 兼容配置 <span class="pill key">需要密钥</span></h2>
+    <div class="field">
+      <label>接口地址（Base URL）</label>
+      <input id="openaiBaseUrl" type="text" placeholder="https://api.openai.com/v1 或其它兼容服务">
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>API Key</label>
+        <input id="openaiApiKey" type="password" placeholder="sk-..." autocomplete="off">
+      </div>
+      <div class="field">
+        <label>模型</label>
+        <input id="openaiModel" type="text" placeholder="gpt-4o-mini">
+      </div>
+    </div>
+    <div class="hint">支持任何 OpenAI Chat Completions 兼容服务（如 DeepSeek、通义千问、Kimi 等），翻译质量最佳，但需要付费或自备 Key。</div>
+  </div>
+
+  <div class="panel">
+    <h2>测试翻译</h2>
+    <div class="field">
+      <label>输入一段英文测试</label>
+      <input id="testInput" type="text" value="Machine learning is a branch of artificial intelligence.">
+    </div>
+    <div class="actions">
+      <button class="ghost" id="testBtn">测试翻译</button>
+      <span id="status"></span>
+    </div>
+    <div id="testResult"></div>
+  </div>
+
+  <div class="actions">
+    <button class="primary" id="saveBtn">保存设置</button>
+    <span id="saveStatus"></span>
+  </div>
+
+<script src="options.js"></script>
+</body>
+</html>

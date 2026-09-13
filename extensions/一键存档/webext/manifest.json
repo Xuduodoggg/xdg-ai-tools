@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "一键存档",
+  "version": "1.0.0",
+  "description": "选中网页文字，按 Alt+S 一键存入本地笔记（配合本地存档工具使用）",
+  "permissions": ["activeTab", "notifications", "storage", "scripting"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "一键存档：选中文字后按 Alt+S 保存",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "save-selection": {
+      "suggested_key": {
+        "default": "Alt+S"
+      },
+      "description": "保存选中文字到本地笔记"
+    }
+  }
+}

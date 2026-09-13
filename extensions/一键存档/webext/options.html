@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>一键存档 · 选项</title>
+<style>
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #f6f7f9;
+    margin: 0;
+    padding: 32px 24px;
+    color: #1f2329;
+  }
+  .card {
+    max-width: 520px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 12px;
+    padding: 28px 32px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  h1 { font-size: 20px; margin: 0 0 6px; }
+  .desc { color: #6b7280; font-size: 13px; line-height: 1.7; margin: 0 0 22px; }
+  .field { margin-bottom: 18px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 9px 12px;
+    font-size: 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    outline: none;
+  }
+  input:focus { border-color: #185fa5; box-shadow: 0 0 0 2px rgba(24,95,165,.15); }
+  .hint { color: #9ca3af; font-size: 12px; margin-top: 5px; line-height: 1.6; }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+  button {
+    padding: 9px 18px;
+    font-size: 14px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  .primary { background: #185fa5; color: #fff; }
+  .primary:hover { background: #0c447c; }
+  .ghost { background: #eef1f5; color: #374151; }
+  .ghost:hover { background: #e2e6ec; }
+  .status { font-size: 13px; margin-left: 6px; }
+  .ok { color: #0f6e56; }
+  .err { color: #a32d2d; }
+  .ok, .err { transition: opacity .2s; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>一键存档 · 设置</h1>
+    <p class="desc">
+      1. 先双击桌面 <b>一键存档.exe</b>，启动本地存档工具；<br>
+      2. 把启动窗口里显示的<b>访问令牌</b>填到下面；<br>
+      3. 选中网页文字，按 <b>Alt+S</b> 即可保存到我的笔记.md。
+    </p>
+
+  <div class="field">
+    <label for="token">访问令牌</label>
+    <input id="token" type="text" placeholder="例如：aB3xK9...（本地工具启动时显示）" autocomplete="off">
+    <div class="hint">令牌只在本机使用，防止其他网页偷偷向本地工具写入内容。</div>
+    <div class="hint" id="tokenState" style="font-weight:600;margin-top:8px;"></div>
+  </div>
+
+  <div class="field">
+    <label for="host">本地服务地址</label>
+    <input id="host" type="text" placeholder="http://127.0.0.1:8631">
+    <div class="hint">一般保持默认；若在配置里改过端口，这里同步修改。</div>
+  </div>
+
+  <div class="row">
+    <button id="save" class="primary">保存设置</button>
+    <button id="test" class="ghost">测试连接</button>
+    <span id="status" class="status"></span>
+  </div>
+</div>
+
+<script src="options.js"></script>
+</body>
+</html>

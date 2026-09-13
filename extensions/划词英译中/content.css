@@ -1,0 +1,138 @@
+/* =========================================================
+ * 划词翻译 · 英译中助手 — 悬浮按钮与结果卡样式
+ * 深色中性风格，在任何网页上均清晰可读
+ * ========================================================= */
+
+#wbt-btn {
+  position: fixed;
+  z-index: 2147483646;
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  background: #2b6cb0;
+  color: #ffffff;
+  font: 600 12px/1 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  transition: background 0.15s ease, transform 0.1s ease;
+  transform-origin: top center;
+}
+#wbt-btn:hover {
+  background: #1a5aa8;
+  transform: scale(1.05);
+}
+#wbt-btn:active {
+  transform: scale(0.96);
+}
+
+#wbt-card {
+  position: fixed;
+  z-index: 2147483647;
+  display: none;
+  box-sizing: border-box;
+  background: #1f2430;
+  color: #e6e9ef;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  font: 13px/1.6 "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  padding: 10px 12px;
+  animation: wbt-pop 0.16s ease-out;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+@keyframes wbt-pop {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+#wbt-card .wbt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+#wbt-card .wbt-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #9fb6ff;
+  letter-spacing: 0.5px;
+}
+#wbt-card .wbt-close {
+  border: none;
+  background: transparent;
+  color: #9aa3b2;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 4px;
+}
+#wbt-card .wbt-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+#wbt-card .wbt-orig {
+  color: #aeb6c3;
+  font-size: 12px;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#wbt-card .wbt-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 7px 0;
+}
+#wbt-card .wbt-trans {
+  color: #ffffff;
+  font-size: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 260px;
+  overflow: auto;
+}
+
+#wbt-card .wbt-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 9px;
+  flex-wrap: wrap;
+}
+#wbt-card .wbt-actions button {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: #d5dae3;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+#wbt-card .wbt-actions button:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+#wbt-card .wbt-actions button.wbt-done {
+  background: #2f7d4f;
+  border-color: #3f9d63;
+  color: #ffffff;
+}
+
+#wbt-card .wbt-err {
+  color: #ff9d9d;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+#wbt-card .wbt-err-hint {
+  color: #8f98a8;
+  font-size: 12px;
+  margin-top: 8px;
+}
