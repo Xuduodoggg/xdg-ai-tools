@@ -1060,6 +1060,8 @@ let sortKey='added', sortDir=1;
 let playlists=savedLS('lp.playlists',[]);           // [{id,name,ids:[]}]
 let favSet=new Set(savedLS('lp.fav',[]));
 let removedMap=savedLS('lp.removed',{});   // {id:{name,title,artist}} 手动移除过、但文件仍在文件夹里的歌
+let lastDir=null;                          // 内存里缓存上次的文件夹句柄：
+                                           // 权限 API 必须在这次点击的手势有效期内调用，不能先 await 再调
 let curTrack=null, curIndex=-1, playOrderIds=[];    // 本次播放的队列（id 数组）
 
 const player={
@@ -1185,6 +1187,7 @@ async function pickDirectory(){
   }
   try{
     const handle=await window.showDirectoryPicker({ mode:'read', id:'lp-music' });
+    lastDir=handle;
     try{ await IDB.set('dirHandle', handle); }catch(e){ /* 隐私模式等场景下可能不可写，不影响本次扫描 */ }
     toast('<span class="spin"></span> 正在扫描文件夹…', 600000);
     const files=[];
@@ -1203,16 +1206,28 @@ async function pickDirectory(){
 
 /* 重新授权上次的音乐文件夹（侧边栏按钮 / 待授权横幅 / 播放待授权歌曲时都会走这里） */
 async function requestRestore(){
-  try{
-    const h=await IDB.get('dirHandle');
-    if(!h){ toast('没有找到上次的文件夹记录，请用「导入文件夹」重新选择'); return; }
-    const p=await h.requestPermission({mode:'read'});
-    if(p!=='granted'){ toast('未获得读取授权，无法恢复播放'); return; }
-    $('#restoreBtn').hidden=true;
-    await scanHandle(h);
-  }catch(e){
-    toast('恢复失败：'+(e.message||e));
+  // 句柄优先从内存拿：requestPermission 需要用掉"这次点击"的用户手势，
+  // 而 await 取一次 IndexedDB 就可能把手势耗掉，导致浏览器拒绝弹权限框。
+  let h=lastDir;
+  if(!h){
+    try{ h=lastDir=await IDB.get('dirHandle'); }catch(e){ h=null; }
   }
+  if(h){
+    let p='prompt';
+    try{ p=await h.requestPermission({mode:'read'}); }
+    catch(e){ p='error'; console.warn('requestPermission 未成功，改为让用户重新选择文件夹', e); }
+    if(p==='granted'){
+      $('#restoreBtn').hidden=true;
+      lastDir=h;
+      await scanHandle(h);
+      return;
+    }
+    if(p==='denied') toast('授权被拒绝，请重新选择音乐文件夹', 2600);
+  } else {
+    toast('没有上次的文件夹记录，请选择音乐文件夹', 2400);
+  }
+  // 兜底：没句柄 / 被拒 / 抛异常，都直接让用户重新选一次文件夹 —— 这本身就是重新授权
+  await pickDirectory();
 }
 
 async function scanHandle(h){
@@ -1264,9 +1279,11 @@ async function playById(id, opts){
   const t=tracks.get(id);
   if(!t){ toast('歌曲已不存在'); return; }
   if(!t.file){
-    toast('《'+esc(trackTitle(t))+'》需要重新授权音乐文件夹后才能播放', 3000);
+    // 这里绝对不能用 rb.click()：合成点击没有"用户手势"，浏览器会直接拒绝权限请求，
+    // 表现出来就是"点一下歌 → 自动去授权 → 恢复失败"。只做提示，让用户自己点那个按钮。
     const rb=$('#restoreBtn');
-    if(rb){ rb.hidden=false; rb.click(); }
+    if(rb){ rb.hidden=false; }
+    toast('《'+esc(trackTitle(t))+'》需要重新选择音乐文件夹：请点侧边栏的「恢复上次的文件夹」', 4200);
     return;
   }
   const pool=playOrderIds.length?playOrderIds:[id];
@@ -1909,6 +1926,7 @@ function bind(){
         tracks.clear(); order=[]; playOrderIds=[]; player.shufflePool=[];
         MetaStore.cache.clear(); MetaStore.index=[];
         removedMap={}; saveLS('lp.removed',removedMap);
+        lastDir=null;
         try{ await IDB.del('dirHandle'); }catch(e){}
         MetaStore.flush();
         $('#restoreBtn').hidden=true;
@@ -2088,6 +2106,7 @@ async function boot(){
   try{
     const h=await IDB.get('dirHandle');
     if(h){
+      lastDir=h;   // 缓存起来，供「重新授权」在点击手势内同步发起权限请求
       const p=await h.queryPermission({mode:'read'});
       if(p==='granted'){ await scanHandle(h); }
       else { $('#restoreBtn').hidden=false; }
