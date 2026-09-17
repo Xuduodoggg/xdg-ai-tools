@@ -369,6 +369,8 @@ dialog::backdrop{background:rgba(0,0,0,.34);backdrop-filter:blur(3px)}
       <button class="btn primary block" id="importDirBtn"><span data-icon="folder"></span>导入文件夹（扫描）</button>
       <button class="btn block" id="importFilesBtn"><span data-icon="plus"></span>添加音乐文件</button>
       <button class="btn block" id="restoreBtn" hidden><span data-icon="restore"></span>恢复上次的文件夹</button>
+      <div id="authStatus" hidden style="font-size:11.5px;line-height:1.55;color:#8a8a8e;margin:8px 2px 0;word-break:break-word"></div>
+      <div style="font-size:10.5px;color:#9a9a9e;opacity:.7;margin:10px 2px 0">Overtone <span id="buildTag">-</span></div>
       <button class="btn block" id="clearBtn"><span data-icon="trash"></span>清空资料库</button>
     </div>
   </aside>
@@ -1183,57 +1185,109 @@ async function* walkDir(handle, prefix){
 
 async function pickDirectory(){
   if(!window.showDirectoryPicker){
-    $('#dirInput').click(); return;
+    // 浏览器没有文件夹选择器（少数环境）：回落到目录型 <input>，一样能重新授权
+    setAuthStatus('当前浏览器不支持文件夹选择框，已改用文件选择框，请选中音乐文件夹');
+    $('#dirInput').click();
+    return;
   }
+  let handle=null;
   try{
-    const handle=await window.showDirectoryPicker({ mode:'read', id:'lp-music' });
+    // startIn 让选择框直接落在上次那个文件夹里，用户只需确认一下；
+    // 句柄失效时传进去会抛错，所以失败就退回不带 startIn 的一次。
+    const opts={ mode:'read', id:'lp-music' };
+    if(lastDir){ try{ opts.startIn=lastDir; }catch(e){} }
+    try{
+      handle=await window.showDirectoryPicker(opts);
+    }catch(e0){
+      if(e0 && (e0.name==='TypeError' || e0.name==='NotAllowedError') && opts.startIn){
+        delete opts.startIn;
+        handle=await window.showDirectoryPicker(opts);
+      } else { throw e0; }
+    }
     lastDir=handle;
     try{ await IDB.set('dirHandle', handle); }catch(e){ /* 隐私模式等场景下可能不可写，不影响本次扫描 */ }
-    toast('<span class="spin"></span> 正在扫描文件夹…', 600000);
+    setAuthStatus('已选中「'+(handle.name||'音乐文件夹')+'」，正在扫描…');
     const files=[];
     for await (const it of walkDir(handle,'')) files.push(it.file);
-    if(!files.length){ $('#toast').classList.remove('show'); toast('该文件夹里没有可识别的音乐文件'); return; }
-    const n=pushFiles(files);
-    toast('<span class="spin"></span> 发现 '+n+' 首，正在读取…', 600000);
-    await drainQueue();
-    toast('已导入 '+(files.length? n:0)+' 首歌曲');
-  }catch(e){
-    $('#toast').classList.remove('show');
-    if(e && e.name==='AbortError') return;
-    console.error(e); toast('扫描失败：'+(e.message||e));
-  }
-}
-
-/* 重新授权上次的音乐文件夹（侧边栏按钮 / 待授权横幅 / 播放待授权歌曲时都会走这里） */
-async function requestRestore(){
-  // 句柄在 boot 里已经读好放在 lastDir，这里不需要任何 await 就能拿到。
-  const h=lastDir;
-  if(h){
-    let p='prompt';
-    try{
-      // 加超时保护：权限提示偶尔会被浏览器忽略或挂起（尤其装成应用后的独立窗口），
-      // 没有回应时不能就这么永远卡着，超时后直接走"重新选文件夹"。
-      p=await Promise.race([
-        h.requestPermission({mode:'read'}),
-        new Promise(r=>setTimeout(()=>r('timeout'), 5000))
-      ]);
-    }catch(e){ p='error'; console.warn('requestPermission 未成功，改为重新选择文件夹', e); }
-    if(p==='granted'){
-      $('#restoreBtn').hidden=true;
-      try{ await scanHandle(h); }
-      catch(e){ toast('扫描失败：'+(e.message||e), 3600); }
+    if(!files.length){
+      $('#toast').classList.remove('show');
+      setAuthStatus('该文件夹里没有可识别的音乐文件（支持 MP3 / FLAC / WAV / M4A / OGG 等）');
       return;
     }
-    if(p==='denied')       toast('授权被拒绝，请重新选择音乐文件夹', 2600);
-    else if(p==='timeout') toast('浏览器没有回应授权请求，请重新选择音乐文件夹', 3000);
-  } else {
-    toast('没有可恢复的文件夹记录，请选择音乐文件夹', 2400);
+    // 重新授权时，这些歌其实**已经在资料库里**（只是缺文件），
+    // pushFiles 只统计"新增"，所以只报它会显示"已导入 0 首"，看着像失败。
+    // 这里分别数清"新增"和"原地恢复"，把真实结果讲给用户听。
+    const missingBefore=Array.from(tracks.values()).filter(t=>!t.file).length;
+    const n=pushFiles(files);
+    setAuthStatus('找到 '+files.length+' 个音频文件，正在读取…');
+    await drainQueue();
+    const stillMissing=Array.from(tracks.values()).filter(t=>!t.file).length;
+    const back=missingBefore-stillMissing;
+    let msg;
+    if(back && n)      msg='已恢复 '+back+' 首、新增 '+n+' 首，资料库现有 '+tracks.size+' 首';
+    else if(back)      msg='已恢复 '+back+' 首歌曲，资料库现有 '+tracks.size+' 首';
+    else if(n)         msg='已导入 '+n+' 首歌曲，资料库现有 '+tracks.size+' 首';
+    else               msg='这些歌曲都已在资料库中，无需重复导入（共 '+tracks.size+' 首）';
+    $('#restoreBtn').hidden=true;
+    setAuthStatus(msg);
+  }catch(e){
+    $('#toast').classList.remove('show');
+    if(e && e.name==='AbortError'){ setAuthStatus('已取消选择文件夹', false); return; }
+    console.error('[Overtone] 扫描失败', e);
+    setAuthStatus('扫描失败：'+(e.message||e));
   }
-  // 兜底：没句柄 / 被拒 / 超时 / 报错，都让用户重新选一次文件夹 —— 这本身就是完整的一次重新授权
-  try{ await pickDirectory(); }
-  catch(e){ toast('打开文件夹选择框失败：'+(e.message||e), 3600); }
+}
+/* 重新授权上次的音乐文件夹（侧边栏按钮 / 待授权横幅 / 播放待授权歌曲时都会走这里） */
+/* 常驻状态行：重新授权这类操作绝不能"点了没反应"，
+   每一步都把结果写在这里（并配一条 12 秒的长提示），用户能直接看到卡在哪。 */
+function setAuthStatus(msg, long){
+  try{ const el=$('#authStatus'); if(el){ el.hidden=false; el.textContent=msg; } }catch(e){}
+  if(long!==false) toast(msg, 12000);
+  console.log('[Overtone] '+msg);
+}
+function authTrace(){
+  // 把环境能力一次讲清楚，方便排查"权限框根本没出现"这类问题
+  const has=typeof window.showDirectoryPicker==='function';
+  return '需授权 '+Array.from(tracks.values()).filter(t=>t.pending).length+' 首；'
+       + '句柄='+(lastDir? '有':'无')+'；文件夹选择器='+(has? '可用':'不可用');
 }
 
+async function requestRestore(){
+  // 重新授权的完整流程（每一步都写进状态行，不会静默）：
+  //   权限还在 → 直接扫描
+  //   权限没了 → 立刻打开文件夹选择框，并用 startIn 定位到上次那个文件夹
+  // 这里刻意不再调用 requestPermission：浏览器可能既不弹询问框、
+  // 又不好好返回结果（装成应用后的独立窗口里就遇到过），用户只会看到"点了没反应"。
+  // 文件夹选择框是唯一一定看得见、且一定拿得到权限的交互。
+  const h=lastDir;
+  console.log('[Overtone] 重新授权：'+authTrace());
+  if(h){
+    let p='prompt';
+    try{ p=await h.queryPermission({mode:'read'}); }
+    catch(e){ p='error'; console.warn('[Overtone] queryPermission 失败', e); }
+    if(p==='granted'){
+      $('#restoreBtn').hidden=true;
+      setAuthStatus('授权仍然有效，正在扫描音乐文件夹…');
+      try{
+        await scanHandle(h);
+        setAuthStatus('已恢复，资料库现有 '+tracks.size+' 首歌曲');
+      }catch(e){
+        console.warn('[Overtone] 扫描失败', e);
+        setAuthStatus('扫描失败：'+(e.message||e)+'，请重新选择文件夹');
+      }
+      return;
+    }
+    setAuthStatus('文件夹授权已失效（'+p+'），这就打开文件夹选择框，请选中你的音乐文件夹');
+  } else {
+    setAuthStatus('没有上次的文件夹记录，这就打开文件夹选择框，请选中你的音乐文件夹');
+  }
+  try{
+    await pickDirectory();
+  }catch(e){
+    console.warn('[Overtone] 打开文件夹选择框失败', e);
+    setAuthStatus('打开文件夹选择框失败：'+(e.message||e));
+  }
+}
 async function scanHandle(h){
   toast('<span class="spin"></span> 正在扫描文件夹…', 600000);
   const files=[];
@@ -1416,7 +1470,7 @@ function renderView(){
 function pendingBanner(){
   const n=Array.from(tracks.values()).filter(t=>t.pending).length;
   if(!n) return '';
-  return '<div class="pending-bar">'+svg('folder',16)+
+  return '<div class="pending-bar" data-auth="1" title="点击重新授权音乐文件夹" style="cursor:pointer">'+svg('folder',16)+
     '<span><b>'+n+'</b> 首歌曲仍保留在资料库中，但文件访问权限已失效，重新授权音乐文件夹即可恢复播放</span>'+
     '<div class="spacer"></div>'+
     '<button class="btn primary" id="pendingRestore">重新授权</button></div>';
@@ -1469,7 +1523,7 @@ function rowHTML(t,i,arr){
     '<div class="t-main"><div class="t-thumb">'+thumb+'</div>'+
       '<div style="min-width:0">'+
         '<div class="t-title">'+esc(title)+'</div>'+
-        (t.pending? '<div class="t-flag">待重新授权</div>' : '')+
+        (t.pending? '<div class="t-flag" data-auth="1" title="点击重新授权音乐文件夹" style="cursor:pointer">待重新授权 · 点击授权</div>' : '')+
       '</div>'+
     '</div>'+
     '<div class="t-artist">'+esc(artist)+'</div>'+
@@ -1955,7 +2009,8 @@ function bind(){
   // 列表交互（事件委托，列表重绘后依然有效）
   const content=$('#content');
   content.addEventListener('click',e=>{
-    if(e.target.closest('#pendingRestore')){ requestRestore(); return; }
+    // 三个入口都要认：横幅里的按钮、整条横幅、以及行内那个「待重新授权」小字
+    if(e.target.closest('#pendingRestore') || e.target.closest('[data-auth]')){ requestRestore(); return; }
     const more=e.target.closest('[data-more]');
     if(more){
       const t=tracks.get(more.dataset.more); if(!t) return;
@@ -2094,10 +2149,11 @@ function paintThemeBtn(){
 }
 
 /* ---------------- 启动 ---------------- */
-const BUILD='2026-09-17.4';
+const BUILD='2026-09-17.5';
 async function boot(){
   document.documentElement.setAttribute('data-build',BUILD);
   console.log('Overtone build '+BUILD);
+  try{ $('#buildTag').textContent=BUILD; }catch(e){}
   document.documentElement.setAttribute('data-theme', savedLS('lp.theme','light'));
   paintThemeBtn();
   buildEqUI();
