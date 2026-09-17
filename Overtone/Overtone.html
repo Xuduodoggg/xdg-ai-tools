@@ -1059,6 +1059,7 @@ let sortKey='added', sortDir=1;
 
 let playlists=savedLS('lp.playlists',[]);           // [{id,name,ids:[]}]
 let favSet=new Set(savedLS('lp.fav',[]));
+let removedMap=savedLS('lp.removed',{});   // {id:{name,title,artist}} 手动移除过、但文件仍在文件夹里的歌
 let curTrack=null, curIndex=-1, playOrderIds=[];    // 本次播放的队列（id 数组）
 
 const player={
@@ -1071,12 +1072,17 @@ const player={
 /* ---------------- 扫描导入 ---------------- */
 const queue=[];
 let scanning=false;
-function pushFiles(files){
+function pushFiles(files, explicit){
   let added=0;
   for(const f of files){
     const ext=extOf(f.name);
     if(!SUPPORTED.has(ext)) continue;
     const id=uid(f.name+'|'+f.size+'|'+f.lastModified);
+    if(removedMap[id]){
+      // 曾被手动移除：扫描时跳过；只有「添加音乐文件」这种明确操作才取消移除标记
+      if(explicit){ delete removedMap[id]; saveLS('lp.removed',removedMap); }
+      else continue;
+    }
     const ex=tracks.get(id);
     if(ex){
       // 已在资料库中：只补回文件句柄，绝不覆盖已解析好的元数据；
@@ -1096,6 +1102,7 @@ function restoreFromIndex(){
   let n=0;
   for(const it of MetaStore.index){
     if(!it || !it.id || tracks.has(it.id)) continue;
+    if(removedMap[it.id]) continue;   // 被手动移除过，不自动恢复
     const m=MetaStore.get(it.id);
     const fb=metaFromName(it.name);
     tracks.set(it.id,{
@@ -1783,7 +1790,12 @@ function showCtx(x,y,items){
   const r=m.getBoundingClientRect();
   m.style.left=Math.min(x, innerWidth-r.width-10)+'px';
   m.style.top=Math.min(y, innerHeight-r.height-10)+'px';
-  $$('#ctxMenu button').forEach(b=>b.onclick=()=>{ hideCtx(); items.find(i=>i.a===b.dataset.a).run(); });
+  $$('#ctxMenu button').forEach(b=>b.onclick=()=>{
+    hideCtx();
+    // 注意：items 里夹着 null 当分隔线，必须先判空再读 .a，否则整段菜单后半截点了没反应
+    const it=items.find(i=>i && i.a===b.dataset.a);
+    if(it && typeof it.run==='function') it.run();
+  });
 }
 function hideCtx(){ $('#ctxMenu').classList.remove('show'); }
 
@@ -1816,14 +1828,22 @@ function toggleFav(id){
   refreshAll(); renderList(); renderHero(); renderPlayerBar();
 }
 function removeTrack(id){
+  const _t=tracks.get(id);
   tracks.delete(id);
   order=order.filter(x=>x!==id);
   playOrderIds=playOrderIds.filter(x=>x!==id);
   playlists.forEach(p=>p.ids=p.ids.filter(x=>x!==id));
   saveLS('lp.playlists',playlists);
+  // 记进"已移除"名单。文件还在硬盘上，所以必须记住"用户不要它"，
+  // 否则下次扫描同一个文件夹会原样再加回来，看起来就像"删不掉"。
+  if(_t){
+    removedMap[id]={ name:_t.name, title:trackTitle(_t), artist:trackArtist(_t), at:Date.now() };
+    saveLS('lp.removed',removedMap);
+  }
   MetaStore.cache.delete(id); MetaStore.schedule();
   if(curTrack&&curTrack.id===id){ audio.pause(); audio.removeAttribute('src'); curTrack=null; }
-  refreshAll(); renderList(); renderHero(); toast('已从资料库移除');
+  refreshAll(); renderList(); renderHero();
+  toast('已从资料库移除。想找回：用「添加音乐文件」重新选中它');
 }
 function addToPlaylist(pid,tid){
   const p=playlists.find(x=>x.id===pid); if(!p) return;
@@ -1866,7 +1886,7 @@ function bind(){
   $('#importDirBtn').onclick=pickDirectory;
   $('#importFilesBtn').onclick=()=>$('#fileInput').click();
   $('#fileInput').onchange=e=>{
-    const n=pushFiles(Array.from(e.target.files));
+    const n=pushFiles(Array.from(e.target.files), true);
     e.target.value='';
     if(!n){ toast('没有识别到支持的音频文件'); return; }
     toast('<span class="spin"></span> 正在读取 '+n+' 个文件…',600000);
@@ -1888,6 +1908,7 @@ function bind(){
         audio.pause(); audio.removeAttribute('src'); curTrack=null;
         tracks.clear(); order=[]; playOrderIds=[]; player.shufflePool=[];
         MetaStore.cache.clear(); MetaStore.index=[];
+        removedMap={}; saveLS('lp.removed',removedMap);
         try{ await IDB.del('dirHandle'); }catch(e){}
         MetaStore.flush();
         $('#restoreBtn').hidden=true;
