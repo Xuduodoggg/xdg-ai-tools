@@ -1077,7 +1077,15 @@ const player={
 const queue=[];
 let scanning=false;
 function pushFiles(files, explicit){
-  let added=0;
+  let added=0, backfilled=0, skippedRemoved=0;
+  // 名字 → 那一条"缺文件"的记录；同名有多条时置 null（有歧义就不猜）
+  const byName=new Map();
+  for(const t of tracks.values()){
+    if(t.file) continue;
+    const k=t.name;
+    if(!byName.has(k)) byName.set(k, t);
+    else byName.set(k, null);
+  }
   for(const f of files){
     const ext=extOf(f.name);
     if(!SUPPORTED.has(ext)) continue;
@@ -1085,7 +1093,7 @@ function pushFiles(files, explicit){
     if(removedMap[id]){
       // 曾被手动移除：扫描时跳过；只有「添加音乐文件」这种明确操作才取消移除标记
       if(explicit){ delete removedMap[id]; saveLS('lp.removed',removedMap); }
-      else continue;
+      else { skippedRemoved++; continue; }
     }
     const ex=tracks.get(id);
     if(ex){
@@ -1094,10 +1102,22 @@ function pushFiles(files, explicit){
       if(!ex.file){ ex.file=f; ex.pending=false; queue.push(id); }
       continue;
     }
+    // 兜底：文件被改名、或重新下载/复制过（size 或 mtime 一变 id 就变了）时，
+    // 如果资料库里正好有一条同名、同样缺文件的记录，就把文件补给那一条，
+    // 而不是新增一条。否则会出现"旧的永远待授权、新的才能播"——
+    // 用户看到的是"显示恢复了，实际上还是听不了"。
+    const cand=byName.get(f.name);
+    if(cand && !cand.file){
+      cand.file=f; cand.pending=false; queue.push(cand.id);
+      byName.delete(f.name);
+      backfilled++;
+      continue;
+    }
     tracks.set(id,{ id, file:f, name:f.name, title:null, artist:null, album:null,
                     duration:0, cover:null, track:null, year:null, added:Date.now()+(added++) });
     queue.push(id);
   }
+  pushFiles.last={ added:added, backfilled:backfilled, skippedRemoved:skippedRemoved };
   return added;
 }
 
@@ -1207,29 +1227,11 @@ async function pickDirectory(){
     lastDir=handle;
     try{ await IDB.set('dirHandle', handle); }catch(e){ /* 隐私模式等场景下可能不可写，不影响本次扫描 */ }
     setAuthStatus('已选中「'+(handle.name||'音乐文件夹')+'」，正在扫描…');
-    const files=[];
-    for await (const it of walkDir(handle,'')) files.push(it.file);
-    if(!files.length){
-      $('#toast').classList.remove('show');
-      setAuthStatus('该文件夹里没有可识别的音乐文件（支持 MP3 / FLAC / WAV / M4A / OGG 等）');
-      return;
-    }
-    // 重新授权时，这些歌其实**已经在资料库里**（只是缺文件），
-    // pushFiles 只统计"新增"，所以只报它会显示"已导入 0 首"，看着像失败。
-    // 这里分别数清"新增"和"原地恢复"，把真实结果讲给用户听。
-    const missingBefore=Array.from(tracks.values()).filter(t=>!t.file).length;
-    const n=pushFiles(files);
-    setAuthStatus('找到 '+files.length+' 个音频文件，正在读取…');
-    await drainQueue();
-    const stillMissing=Array.from(tracks.values()).filter(t=>!t.file).length;
-    const back=missingBefore-stillMissing;
-    let msg;
-    if(back && n)      msg='已恢复 '+back+' 首、新增 '+n+' 首，资料库现有 '+tracks.size+' 首';
-    else if(back)      msg='已恢复 '+back+' 首歌曲，资料库现有 '+tracks.size+' 首';
-    else if(n)         msg='已导入 '+n+' 首歌曲，资料库现有 '+tracks.size+' 首';
-    else               msg='这些歌曲都已在资料库中，无需重复导入（共 '+tracks.size+' 首）';
-    $('#restoreBtn').hidden=true;
-    setAuthStatus(msg);
+    // 扫描 + 报数走和 requestRestore 同一套逻辑，两边不会再说出不一样的话
+    const r=await scanHandle(handle);
+    const msg=restoreReport(r);
+    setAuthStatus(msg, r.missingAfter? 12000 : 4200);
+    $('#restoreBtn').hidden = !r.missingAfter;
   }catch(e){
     $('#toast').classList.remove('show');
     if(e && e.name==='AbortError'){ setAuthStatus('已取消选择文件夹', false); return; }
@@ -1237,14 +1239,39 @@ async function pickDirectory(){
     setAuthStatus('扫描失败：'+(e.message||e));
   }
 }
+
 /* 重新授权上次的音乐文件夹（侧边栏按钮 / 待授权横幅 / 播放待授权歌曲时都会走这里） */
 /* 常驻状态行：重新授权这类操作绝不能"点了没反应"，
    每一步都把结果写在这里（并配一条 12 秒的长提示），用户能直接看到卡在哪。 */
 function setAuthStatus(msg, long){
   try{ const el=$('#authStatus'); if(el){ el.hidden=false; el.textContent=msg; } }catch(e){}
-  if(long!==false) toast(msg, 12000);
+  if(long!==false) toast(msg, (typeof long==='number')? long : 12000);
   console.log('[Overtone] '+msg);
 }
+/* 恢复结果文案：一律按真实数据说话。
+   扫不到文件、或一首都没对上时，绝不说"已恢复"——
+   之前正是一句无条件的"已恢复"让用户以为好了，点歌却听不了。 */
+function restoreReport(r){
+  if(!r.scanned){
+    let m='这个文件夹里没有找到可识别的音乐文件（支持 MP3 / FLAC / WAV / M4A / OGG 等）';
+    if(r.skippedRemoved) m+='；另有 '+r.skippedRemoved+' 首此前被你移除过的歌曲被跳过';
+    return m;
+  }
+  const head=[];
+  if(r.restored) head.push('已恢复 '+r.restored+' 首');
+  if(r.added)    head.push('新增 '+r.added+' 首');
+  const parts=[];
+  if(head.length) parts.push(head.join('、')+'，资料库现有 '+tracks.size+' 首');
+  else parts.push('扫到 '+r.scanned+' 个音频文件，但没有一首能对上资料库里的记录');
+  if(r.skippedRemoved) parts.push('跳过 '+r.skippedRemoved+' 首此前被你移除过的歌曲');
+  if(r.missingAfter){
+    parts.push('仍有 '+r.missingAfter+' 首没恢复'
+      + (r.missingNames.length? ('（如 '+r.missingNames.join('、')+'）') : '')
+      + '，可能被移动或改名了，可以再选一次文件夹');
+  }
+  return parts.join('；');
+}
+
 function authTrace(){
   // 把环境能力一次讲清楚，方便排查"权限框根本没出现"这类问题
   const has=typeof window.showDirectoryPicker==='function';
@@ -1266,11 +1293,14 @@ async function requestRestore(){
     try{ p=await h.queryPermission({mode:'read'}); }
     catch(e){ p='error'; console.warn('[Overtone] queryPermission 失败', e); }
     if(p==='granted'){
-      $('#restoreBtn').hidden=true;
       setAuthStatus('授权仍然有效，正在扫描音乐文件夹…');
       try{
-        await scanHandle(h);
-        setAuthStatus('已恢复，资料库现有 '+tracks.size+' 首歌曲');
+        // 关键：扫描结果由 scanHandle 如实返回，文案由 restoreReport 按真实数据生成，
+        // 不再无条件说"已恢复"（用户就是因为这句才以为好了）
+        const r=await scanHandle(h);
+        const msg=restoreReport(r);
+        setAuthStatus(msg, r.missingAfter? 12000 : 4200);
+        $('#restoreBtn').hidden = !r.missingAfter;
       }catch(e){
         console.warn('[Overtone] 扫描失败', e);
         setAuthStatus('扫描失败：'+(e.message||e)+'，请重新选择文件夹');
@@ -1288,13 +1318,27 @@ async function requestRestore(){
     setAuthStatus('打开文件夹选择框失败：'+(e.message||e));
   }
 }
+
 async function scanHandle(h){
   toast('<span class="spin"></span> 正在扫描文件夹…', 600000);
+  const missingBefore=Array.from(tracks.values()).filter(t=>!t.file).length;
   const files=[];
   for await (const it of walkDir(h,'')) files.push(it.file);
   const n=pushFiles(files);
-  if(!n && !queue.length){ $('#toast').classList.remove('show'); toast('没有需要更新的歌曲'); return; }
-  await drainQueue();
+  const st=pushFiles.last||{};
+  if(queue.length) await drainQueue();
+  else { $('#toast').classList.remove('show'); }
+  const missing=Array.from(tracks.values()).filter(t=>!t.file);
+  // 把"到底恢复了几首"如实交出去：调用方据此报数，不再靠一句无条件的"已恢复"
+  return {
+    scanned: files.length,
+    added: n,
+    backfilled: st.backfilled||0,
+    skippedRemoved: st.skippedRemoved||0,
+    restored: missingBefore - missing.length,
+    missingAfter: missing.length,
+    missingNames: missing.slice(0,3).map(t=>t.name)
+  };
 }
 
 /* 拖拽导入 */
@@ -1341,7 +1385,9 @@ async function playById(id, opts){
     // 表现出来就是"点一下歌 → 自动去授权 → 恢复失败"。只做提示，让用户自己点那个按钮。
     const rb=$('#restoreBtn');
     if(rb){ rb.hidden=false; }
-    toast('《'+esc(trackTitle(t))+'》需要重新选择音乐文件夹：请点侧边栏的「恢复上次的文件夹」', 4200);
+    const needMsg='《'+trackTitle(t)+'》的文件访问权限还没恢复：请点侧边栏的「恢复上次的文件夹」重新授权';
+    toast(esc(needMsg), 8000);
+    try{ setAuthStatus(needMsg, false); }catch(e){}
     return;
   }
   const pool=playOrderIds.length?playOrderIds:[id];
@@ -2149,7 +2195,7 @@ function paintThemeBtn(){
 }
 
 /* ---------------- 启动 ---------------- */
-const BUILD='2026-09-17.5';
+const BUILD='2026-09-17.6';
 async function boot(){
   document.documentElement.setAttribute('data-build',BUILD);
   console.log('Overtone build '+BUILD);
