@@ -1077,7 +1077,7 @@ const player={
 const queue=[];
 let scanning=false;
 function pushFiles(files, explicit){
-  let added=0, backfilled=0, skippedRemoved=0;
+  let added=0, backfilled=0, skippedRemoved=0, present=0;
   // 名字 → 那一条"缺文件"的记录；同名有多条时置 null（有歧义就不猜）
   const byName=new Map();
   for(const t of tracks.values()){
@@ -1100,6 +1100,7 @@ function pushFiles(files, explicit){
       // 已在资料库中：只补回文件句柄，绝不覆盖已解析好的元数据；
       // 若此前只有索引没有文件，则重新走一遍解析（顺带用上最新的解析逻辑）
       if(!ex.file){ ex.file=f; ex.pending=false; queue.push(id); }
+      else present++;   // 文件早就在库里且已挂上：这一首"无事可做"，但要如实报出来
       continue;
     }
     // 兜底：文件被改名、或重新下载/复制过（size 或 mtime 一变 id 就变了）时，
@@ -1117,7 +1118,7 @@ function pushFiles(files, explicit){
                     duration:0, cover:null, track:null, year:null, added:Date.now()+(added++) });
     queue.push(id);
   }
-  pushFiles.last={ added:added, backfilled:backfilled, skippedRemoved:skippedRemoved };
+  pushFiles.last={ added:added, backfilled:backfilled, skippedRemoved:skippedRemoved, present:present };
   return added;
 }
 
@@ -1203,7 +1204,7 @@ async function* walkDir(handle, prefix){
   }
 }
 
-async function pickDirectory(){
+async function pickDirectory(auto){
   if(!window.showDirectoryPicker){
     // 浏览器没有文件夹选择器（少数环境）：回落到目录型 <input>，一样能重新授权
     setAuthStatus('当前浏览器不支持文件夹选择框，已改用文件选择框，请选中音乐文件夹');
@@ -1229,12 +1230,25 @@ async function pickDirectory(){
     setAuthStatus('已选中「'+(handle.name||'音乐文件夹')+'」，正在扫描…');
     // 扫描 + 报数走和 requestRestore 同一套逻辑，两边不会再说出不一样的话
     const r=await scanHandle(handle);
-    const msg=restoreReport(r);
-    setAuthStatus(msg, r.missingAfter? 12000 : 4200);
     $('#restoreBtn').hidden = !r.missingAfter;
+    // 选到的文件夹里只有"已经在库里的歌"（或压根没扫到音频），而资料库里还有歌没恢复
+    // ——说明它只是音乐目录的一部分（八九成是个子文件夹，例如 360Downloads\安静）。
+    // 这时自动把选择框再打开一次，并直说"往上选一层"；每个用户操作最多自动重开一次，不会循环。
+    if(r.missingAfter && !r.restored && !r.added && !auto){
+      setAuthStatus('没找到新的歌：'+(r.folder? ('「'+r.folder+'」看来只是音乐目录的一部分') : '这个文件夹里只有一部分歌')
+        +'，仍有 '+r.missingAfter+' 首没恢复。请点选择框左上角的「上一级」，'
+        +'改选包含它的父文件夹（选父文件夹会自动扫描里面所有子文件夹）', 20000);
+      await pickDirectory(true);
+      return;
+    }
+    setAuthStatus(restoreReport(r), r.missingAfter? 12000 : 4200);
   }catch(e){
     $('#toast').classList.remove('show');
-    if(e && e.name==='AbortError'){ setAuthStatus('已取消选择文件夹', false); return; }
+    if(e && e.name==='AbortError'){
+      // 自动重开时用户点了取消：保留上一条"请上一级"的说明，别覆盖成"已取消"
+      if(auto) return;
+      setAuthStatus('已取消选择文件夹', false); return;
+    }
     console.error('[Overtone] 扫描失败', e);
     setAuthStatus('扫描失败：'+(e.message||e));
   }
@@ -1252,25 +1266,39 @@ function setAuthStatus(msg, long){
    扫不到文件、或一首都没对上时，绝不说"已恢复"——
    之前正是一句无条件的"已恢复"让用户以为好了，点歌却听不了。 */
 function restoreReport(r){
+  const where = r.folder ? ('「'+r.folder+'」') : '这个文件夹';
   if(!r.scanned){
-    let m='这个文件夹里没有找到可识别的音乐文件（支持 MP3 / FLAC / WAV / M4A / OGG 等）';
+    let m='在'+where+'里没有找到可识别的音乐文件（支持 MP3 / FLAC / WAV / M4A / OGG 等）';
     if(r.skippedRemoved) m+='；另有 '+r.skippedRemoved+' 首此前被你移除过的歌曲被跳过';
+    if(r.missingAfter) m+='；仍有 '+r.missingAfter+' 首没恢复，'+UPHINT;
     return m;
   }
   const head=[];
   if(r.restored) head.push('已恢复 '+r.restored+' 首');
   if(r.added)    head.push('新增 '+r.added+' 首');
   const parts=[];
-  if(head.length) parts.push(head.join('、')+'，资料库现有 '+tracks.size+' 首');
-  else parts.push('扫到 '+r.scanned+' 个音频文件，但没有一首能对上资料库里的记录');
+  if(head.length){
+    parts.push('在'+where+'里'+head.join('、')+'，资料库现有 '+tracks.size+' 首');
+  }else{
+    // 扫到了文件、却一首都没恢复：说明这些文件早就在库里，不是"没对上"
+    // （旧文案说"没有一首能对上资料库里的记录"，听上去像全盘失败，误导过人）
+    let s='在'+where+'里扫到 '+r.scanned+' 个音频文件，它们都已在资料库中（无需恢复）';
+    if(r.present && r.present < r.scanned) s+='（其中 '+r.present+' 首原本就挂着文件）';
+    parts.push(s);
+  }
   if(r.skippedRemoved) parts.push('跳过 '+r.skippedRemoved+' 首此前被你移除过的歌曲');
   if(r.missingAfter){
     parts.push('仍有 '+r.missingAfter+' 首没恢复'
       + (r.missingNames.length? ('（如 '+r.missingNames.join('、')+'）') : '')
-      + '，可能被移动或改名了，可以再选一次文件夹');
+      + '，这些歌不在'+where+'里，'+UPHINT);
+  }else{
+    parts.push('资料库里 '+tracks.size+' 首的文件都齐了');
   }
   return parts.join('；');
 }
+/* 还有歌没恢复时的统一指引：关键是告诉用户"往上一级选"，
+   而不是让他反复选同一个子文件夹（那正是之前卡住的原因） */
+const UPHINT='请点文件夹选择框左上角的「上一级」，改选包含它的父文件夹（选中父文件夹会自动扫描里面所有子文件夹）';
 
 function authTrace(){
   // 把环境能力一次讲清楚，方便排查"权限框根本没出现"这类问题
@@ -1298,9 +1326,17 @@ async function requestRestore(){
         // 关键：扫描结果由 scanHandle 如实返回，文案由 restoreReport 按真实数据生成，
         // 不再无条件说"已恢复"（用户就是因为这句才以为好了）
         const r=await scanHandle(h);
-        const msg=restoreReport(r);
-        setAuthStatus(msg, r.missingAfter? 12000 : 4200);
         $('#restoreBtn').hidden = !r.missingAfter;
+        // 上次那个文件夹里没有可恢复的东西、却还有歌缺着 —— 说明歌在别的文件夹里
+        // （存下来的句柄很可能只是音乐目录的一个子文件夹）。这种情况必须把选择框打开
+        // 让用户换一个；否则权限一直有效，点多少次都是同一句话，人就被卡在这了。
+        if(r.missingAfter && !r.restored && !r.added){
+          setAuthStatus('「'+(r.folder||'上次的文件夹')+'」里没有新的歌可恢复，仍有 '+r.missingAfter
+            +' 首没恢复，这就打开文件夹选择框：请点左上角「上一级」，改选它的父文件夹', 20000);
+          await pickDirectory(true);   // 传 true：这里只开一次，不再自动重开第二次
+          return;
+        }
+        setAuthStatus(restoreReport(r), r.missingAfter? 12000 : 4200);
       }catch(e){
         console.warn('[Overtone] 扫描失败', e);
         setAuthStatus('扫描失败：'+(e.message||e)+'，请重新选择文件夹');
@@ -1332,7 +1368,9 @@ async function scanHandle(h){
   // 把"到底恢复了几首"如实交出去：调用方据此报数，不再靠一句无条件的"已恢复"
   return {
     scanned: files.length,
+    folder: (h && h.name) ? h.name : '',
     added: n,
+    present: st.present||0,
     backfilled: st.backfilled||0,
     skippedRemoved: st.skippedRemoved||0,
     restored: missingBefore - missing.length,
@@ -2195,7 +2233,7 @@ function paintThemeBtn(){
 }
 
 /* ---------------- 启动 ---------------- */
-const BUILD='2026-09-17.6';
+const BUILD='2026-09-17.7';
 async function boot(){
   document.documentElement.setAttribute('data-build',BUILD);
   console.log('Overtone build '+BUILD);
@@ -2226,7 +2264,13 @@ async function boot(){
     if(h){
       lastDir=h;   // 缓存起来，供「重新授权」在点击手势内同步发起权限请求
       const p=await h.queryPermission({mode:'read'});
-      if(p==='granted'){ await scanHandle(h); }
+      if(p==='granted'){
+        // 如实报数：把"扫的是哪个文件夹、还差几首没恢复"直接写在侧边栏，
+        // 免得用户以为已经恢复好了、点歌却听不了（存着的文件夹可能只是音乐目录的一部分）
+        const r=await scanHandle(h);
+        setAuthStatus(restoreReport(r), r.missingAfter? 6000 : 3000);
+        $('#restoreBtn').hidden = !r.missingAfter;
+      }
       else { $('#restoreBtn').hidden=false; }
     }
   }catch(e){ /* 忽略 */ }
