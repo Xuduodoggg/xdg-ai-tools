@@ -1,8 +1,15 @@
 /* Overtone Service Worker
-   目标：装成应用后，即使断网也能打开界面（音乐本来就在本机）。
-   策略：应用外壳预缓存；页面导航走「网络优先」，保证重新部署后能拿到新版。 */
+   目标：装成应用后即使断网也能打开界面（音乐本来就在本机），并且每次打开都尽量"秒开"。
 
-const VERSION = 'overtone-v1';
+   策略：应用外壳预缓存；页面导航走「缓存优先 + 后台静默更新」。
+
+   为什么不用「网络优先」：那样每次浏览器 HTTP 缓存过期，打开时都要真的去远端取一次页面，
+   而远端首字节时间实测能在 0.5~1.7 秒之间波动，于是表现为"有时还行、有时卡好几秒"。
+   改成缓存优先后，页面立刻从本地 Cache Storage 返回（页内只需几十毫秒），
+   新版在后台悄悄取回来写进缓存，下次打开生效 —— 代价是更新晚一次启动，
+   换来的是打开耗时稳定、不再被网络拖着走。 */
+
+const VERSION = 'overtone-v2';
 const SCOPE = self.registration.scope;
 const ENTRY = new URL('Overtone.html', SCOPE).href;
 
@@ -49,6 +56,26 @@ async function offlineResponse() {
   );
 }
 
+/* 后台取最新版并写回缓存。
+   用 cache:'no-cache' 强制做条件请求：内容没变服务端回 304（很便宜），
+   变了就拿到新版 —— 这样更新能在一次启动内完成，而不用等 HTTP 缓存自然过期。
+   任何失败都吞掉：绝不能影响已经返回给页面的缓存副本。 */
+function refresh(request, cacheKey) {
+  return fetch(request, { cache: 'no-cache' })
+    .then(async (res) => {
+      if (res && res.ok) {
+        const cache = await caches.open(VERSION);
+        await cache.put(cacheKey, res.clone());
+      }
+      return res;
+    })
+    .catch(() => null);
+}
+
+function keepAlive(event, promise) {
+  try { event.waitUntil(promise); } catch (e) { /* 保活失败不影响返回 */ }
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
@@ -57,33 +84,31 @@ self.addEventListener('fetch', (event) => {
   try { url = new URL(req.url); } catch (e) { return; }
   if (url.origin !== self.location.origin) return;   // 只接管同源资源
 
-  // 页面导航：网络优先，失败回退缓存
+  // 页面导航：缓存优先 + 后台静默更新
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
-      try {
-        const fresh = await fetch(req);
-        const cache = await caches.open(VERSION);
-        cache.put(ENTRY, fresh.clone());
-        return fresh;
-      } catch (err) {
-        const cache = await caches.open(VERSION);
-        return (await cache.match(ENTRY)) || (await cache.match(req)) || offlineResponse();
+      const cache = await caches.open(VERSION);
+      const hit = (await cache.match(ENTRY)) || (await cache.match(req));
+      if (hit) {
+        keepAlive(event, refresh(req, ENTRY));   // 后台更新，不阻塞这次返回
+        return hit;
       }
+      // 首次访问（本地还没有外壳）：只能等网络
+      const fresh = await refresh(req, ENTRY);
+      return fresh || offlineResponse();
     })());
     return;
   }
 
-  // 其余资源：缓存优先，未命中再走网络并顺手缓存
+  // 其余同源资源：同样缓存优先 + 后台静默更新
   event.respondWith((async () => {
     const cache = await caches.open(VERSION);
     const hit = await cache.match(req, { ignoreSearch: true });
-    if (hit) return hit;
-    try {
-      const res = await fetch(req);
-      if (res && res.ok && res.type === 'basic') cache.put(req, res.clone());
-      return res;
-    } catch (err) {
-      return new Response('', { status: 504, statusText: 'offline' });
+    if (hit) {
+      keepAlive(event, refresh(req, req));
+      return hit;
     }
+    const fresh = await refresh(req, req);
+    return fresh || new Response('', { status: 504, statusText: 'offline' });
   })());
 });
