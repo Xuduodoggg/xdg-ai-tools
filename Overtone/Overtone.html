@@ -1206,28 +1206,32 @@ async function pickDirectory(){
 
 /* 重新授权上次的音乐文件夹（侧边栏按钮 / 待授权横幅 / 播放待授权歌曲时都会走这里） */
 async function requestRestore(){
-  // 句柄优先从内存拿：requestPermission 需要用掉"这次点击"的用户手势，
-  // 而 await 取一次 IndexedDB 就可能把手势耗掉，导致浏览器拒绝弹权限框。
-  let h=lastDir;
-  if(!h){
-    try{ h=lastDir=await IDB.get('dirHandle'); }catch(e){ h=null; }
-  }
+  // 句柄在 boot 里已经读好放在 lastDir，这里不需要任何 await 就能拿到。
+  const h=lastDir;
   if(h){
     let p='prompt';
-    try{ p=await h.requestPermission({mode:'read'}); }
-    catch(e){ p='error'; console.warn('requestPermission 未成功，改为让用户重新选择文件夹', e); }
+    try{
+      // 加超时保护：权限提示偶尔会被浏览器忽略或挂起（尤其装成应用后的独立窗口），
+      // 没有回应时不能就这么永远卡着，超时后直接走"重新选文件夹"。
+      p=await Promise.race([
+        h.requestPermission({mode:'read'}),
+        new Promise(r=>setTimeout(()=>r('timeout'), 5000))
+      ]);
+    }catch(e){ p='error'; console.warn('requestPermission 未成功，改为重新选择文件夹', e); }
     if(p==='granted'){
       $('#restoreBtn').hidden=true;
-      lastDir=h;
-      await scanHandle(h);
+      try{ await scanHandle(h); }
+      catch(e){ toast('扫描失败：'+(e.message||e), 3600); }
       return;
     }
-    if(p==='denied') toast('授权被拒绝，请重新选择音乐文件夹', 2600);
+    if(p==='denied')       toast('授权被拒绝，请重新选择音乐文件夹', 2600);
+    else if(p==='timeout') toast('浏览器没有回应授权请求，请重新选择音乐文件夹', 3000);
   } else {
-    toast('没有上次的文件夹记录，请选择音乐文件夹', 2400);
+    toast('没有可恢复的文件夹记录，请选择音乐文件夹', 2400);
   }
-  // 兜底：没句柄 / 被拒 / 抛异常，都直接让用户重新选一次文件夹 —— 这本身就是重新授权
-  await pickDirectory();
+  // 兜底：没句柄 / 被拒 / 超时 / 报错，都让用户重新选一次文件夹 —— 这本身就是完整的一次重新授权
+  try{ await pickDirectory(); }
+  catch(e){ toast('打开文件夹选择框失败：'+(e.message||e), 3600); }
 }
 
 async function scanHandle(h){
@@ -1807,6 +1811,7 @@ function showCtx(x,y,items){
   const r=m.getBoundingClientRect();
   m.style.left=Math.min(x, innerWidth-r.width-10)+'px';
   m.style.top=Math.min(y, innerHeight-r.height-10)+'px';
+  window.__ctxOpenedAt=Date.now();   // 记下打开时刻：弹出它的那次点击会继续冒泡到 document，需要在全局处理器里豁免
   $$('#ctxMenu button').forEach(b=>b.onclick=()=>{
     hideCtx();
     // 注意：items 里夹着 null 当分隔线，必须先判空再读 .a，否则整段菜单后半截点了没反应
@@ -1917,7 +1922,8 @@ function bind(){
     drainQueue().then(()=>toast('已导入 '+n+' 首歌曲'));
   };
   $('#restoreBtn').onclick=requestRestore;
-  $('#clearBtn').onclick=()=>{
+  $('#clearBtn').onclick=e=>{
+    e.stopPropagation();   // 别让这次点击冒泡触发全局收起，否则确认菜单刚弹出就没了
     if(!tracks.size) return toast('资料库已经是空的');
     showCtx(innerWidth/2-95, innerHeight/2-40, [
       {head:'确认清空 '+tracks.size+' 首歌曲？'},
@@ -2069,7 +2075,14 @@ function bind(){
   });
 
   // 全局点击收起菜单
-  document.addEventListener('click',e=>{ if(!e.target.closest('#ctxMenu')) hideCtx(); });
+  // 全局点击别处收起菜单。
+  // 注意：弹出菜单的那次点击本身也会冒泡到这里，如果不豁免，
+  // 菜单会在同一个事件里被立刻收起 —— 「清空资料库」的确认框就是这样点不到的。
+  document.addEventListener('click',e=>{
+    if(e.target.closest('#ctxMenu')) return;
+    if(Date.now()-(window.__ctxOpenedAt||0) < 500) return;
+    hideCtx();
+  });
   window.addEventListener('blur',hideCtx);
   window.addEventListener('resize',()=>{ hideCtx(); clearTimeout(window.__rz); window.__rz=setTimeout(drawEqCurve,180); });
 }
@@ -2081,7 +2094,10 @@ function paintThemeBtn(){
 }
 
 /* ---------------- 启动 ---------------- */
+const BUILD='2026-09-17.4';
 async function boot(){
+  document.documentElement.setAttribute('data-build',BUILD);
+  console.log('Overtone build '+BUILD);
   document.documentElement.setAttribute('data-theme', savedLS('lp.theme','light'));
   paintThemeBtn();
   buildEqUI();
@@ -2112,6 +2128,9 @@ async function boot(){
       else { $('#restoreBtn').hidden=false; }
     }
   }catch(e){ /* 忽略 */ }
+  // 只要资料库里还有"待重新授权"的歌，就把这个按钮亮出来：
+  // 就算没有句柄记录，它也能让你重新选一次文件夹，比只留一条横幅更明确。
+  try{ if(Array.from(tracks.values()).some(t=>t.pending)) $('#restoreBtn').hidden=false; }catch(e){}
 
   // 离开页面前尽力把资料库索引写盘
   window.addEventListener('beforeunload',()=>{ try{ MetaStore.flush(); }catch(e){} });
